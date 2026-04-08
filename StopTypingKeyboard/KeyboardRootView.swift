@@ -16,9 +16,10 @@ struct KeyboardRootView: View {
     @State private var isShifted = false
     @State private var showNumbers = false
     @State private var selectedMode = "Formal"
-    @State private var waveformBars: [CGFloat] = Array(repeating: 4, count: 11)
+    @State private var waveformBars: [CGFloat] = Array(repeating: 5, count: 25)
     @State private var waveformTimer: Timer?
     @State private var deleteTimer: Timer?
+    @State private var lastSpeechTime: Date = .distantPast
 
     private let modes = ["Formal", "Casual", "Friendly", "Short"]
 
@@ -163,13 +164,14 @@ struct KeyboardRootView: View {
 
     // State C: Recording
     private var recordingToolbar: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 0) {
+            // Top controls
             HStack {
                 Button { onCancelDictation() } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 15, weight: .medium))
+                        .font(.system(size: 16, weight: .medium))
                         .foregroundStyle(Color(UIColor.label))
-                        .frame(width: 34, height: 34)
+                        .frame(width: 40, height: 40)
                         .background(Color(UIColor.systemGray4))
                         .clipShape(Circle())
                 }
@@ -182,38 +184,45 @@ struct KeyboardRootView: View {
 
                 Button { onStopDictation() } label: {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
+                        .frame(width: 40, height: 40)
                         .background(darkBg)
                         .clipShape(Circle())
                 }
             }
+            .padding(.bottom, 24)
 
-            // Audio-reactive waveform bars
-            HStack(spacing: 3) {
-                ForEach(0..<11, id: \.self) { i in
-                    RoundedRectangle(cornerRadius: 1.5)
+            Spacer()
+
+            // Large waveform — 25 thick bars, tall, bold
+            HStack(spacing: 3.5) {
+                ForEach(0..<25, id: \.self) { i in
+                    RoundedRectangle(cornerRadius: 2)
                         .fill(Color(UIColor.label))
-                        .frame(width: 3, height: waveformBars[i])
-                        .animation(.easeOut(duration: 0.15), value: waveformBars[i])
+                        .frame(width: 4, height: waveformBars.indices.contains(i) ? waveformBars[i] : 5)
+                        .animation(.easeOut(duration: 0.1), value: waveformBars.indices.contains(i) ? waveformBars[i] : 5)
                 }
             }
+            .frame(height: 80)
             .onAppear { startWaveformPolling() }
             .onDisappear { stopWaveformPolling() }
 
-            VStack(spacing: 2) {
+            .padding(.bottom, 16)
+
+            VStack(spacing: 3) {
                 Text("Listening")
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Color(UIColor.label))
                 Text("iPhone Microphone")
                     .font(.system(size: 13))
                     .foregroundStyle(Color(UIColor.secondaryLabel))
             }
 
-            Spacer().frame(height: 30)
+            Spacer()
         }
-        .padding(.top, 8)
+        .padding(.top, 10)
+        .padding(.bottom, 16)
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -372,20 +381,38 @@ struct KeyboardRootView: View {
 
     // MARK: - Waveform
 
+    private let speechThreshold: CGFloat = 0.03
+    private let holdDuration: TimeInterval = 0.25
+
     private func startWaveformPolling() {
         waveformTimer?.invalidate()
-        waveformTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { _ in
+        waveformTimer = Timer.scheduledTimer(withTimeInterval: 0.07, repeats: true) { _ in
             let level = CGFloat(SharedDefaults.shared.audioLevel)
-            // Generate bars based on real audio level with some randomness for natural feel
+            // 25 bars — organic wave pattern, taller in the center
+            let pattern: [CGFloat] = [
+                0.2, 0.35, 0.3, 0.5, 0.4, 0.6, 0.5, 0.75, 0.6, 0.85,
+                0.7, 0.95, 1.0, 0.95, 0.7,
+                0.85, 0.6, 0.75, 0.5, 0.6, 0.4, 0.5, 0.3, 0.35, 0.2
+            ]
+            let now = Date()
+
+            if level >= speechThreshold {
+                lastSpeechTime = now
+            }
+
+            let isSpeaking = now.timeIntervalSince(lastSpeechTime) < holdDuration
+
             var newBars: [CGFloat] = []
-            // Pattern: outer bars shorter, inner bars taller
-            let pattern: [CGFloat] = [0.5, 0.3, 0.6, 0.2, 1.0, 0.2, 0.3, 1.0, 0.2, 0.6, 0.3]
-            for i in 0..<11 {
-                let base: CGFloat = 4 // minimum height when silent
-                let maxHeight: CGFloat = 36
-                let randomJitter = CGFloat.random(in: -0.1...0.1)
-                let barLevel = max(0, min(1, level * pattern[i] + randomJitter))
-                newBars.append(base + barLevel * (maxHeight - base))
+            for i in 0..<25 {
+                if isSpeaking {
+                    let maxHeight: CGFloat = 75
+                    let minActive: CGFloat = 10
+                    let jitter = CGFloat.random(in: -0.12...0.12)
+                    let barLevel = max(0, min(1, level * pattern[i] + jitter))
+                    newBars.append(minActive + barLevel * (maxHeight - minActive))
+                } else {
+                    newBars.append(5)
+                }
             }
             waveformBars = newBars
         }
@@ -394,7 +421,7 @@ struct KeyboardRootView: View {
     private func stopWaveformPolling() {
         waveformTimer?.invalidate()
         waveformTimer = nil
-        waveformBars = Array(repeating: 4, count: 11)
+        waveformBars = Array(repeating: 5, count: 25)
     }
 
     // MARK: - Delete Key (hold to repeat)

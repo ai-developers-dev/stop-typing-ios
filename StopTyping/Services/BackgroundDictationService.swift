@@ -233,7 +233,7 @@ final class BackgroundDictationService: ObservableObject {
         stopEngine()
         recognitionRequest?.endAudio()
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             guard let self else { return }
             let rawTranscript = self.currentTranscript
             self.log("Raw ASR: '\(rawTranscript.prefix(80))'")

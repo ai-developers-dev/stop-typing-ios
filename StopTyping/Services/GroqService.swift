@@ -16,8 +16,8 @@ final class GroqService {
         }
         return key
     }()
-    private let model = "llama-3.3-70b-versatile"
-    private let timeout: TimeInterval = 5.0
+    private let model = "llama-3.1-8b-instant"
+    private let timeout: TimeInterval = 3.0
 
     private let systemPrompt = """
         You are a voice dictation post-processor. Clean up the following spoken text:
@@ -42,20 +42,54 @@ final class GroqService {
     /// Sends raw ASR transcript to Groq for cleanup.
     /// Returns cleaned text, or the original raw text if anything fails.
     func cleanTranscript(_ rawText: String) async -> String {
-        guard !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return rawText
+        let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return rawText }
+
+        let wordCount = trimmed.components(separatedBy: .whitespaces).filter { !$0.isEmpty }.count
+
+        // Short phrases (≤5 words): quick local cleanup, skip network call
+        if wordCount <= 5 {
+            let quick = quickClean(trimmed)
+            SharedDefaults.shared.appendLog("APP: Quick clean (≤5 words): '\(quick)'")
+            return quick
         }
 
-        SharedDefaults.shared.appendLog("APP: Groq cleanup starting for: '\(rawText.prefix(60))...'")
+        // Longer text: send to Groq LLM
+        SharedDefaults.shared.appendLog("APP: Groq cleanup (\(wordCount) words)...")
 
         do {
-            let cleaned = try await callGroq(rawText)
-            SharedDefaults.shared.appendLog("APP: Groq cleanup done: '\(cleaned.prefix(60))...'")
+            let cleaned = try await callGroq(trimmed)
+            SharedDefaults.shared.appendLog("APP: Groq done: '\(cleaned.prefix(60))...'")
             return cleaned
         } catch {
-            SharedDefaults.shared.appendLog("APP: Groq cleanup FAILED: \(error.localizedDescription) — using raw text")
-            return rawText
+            SharedDefaults.shared.appendLog("APP: Groq FAILED: \(error.localizedDescription) — using quick clean")
+            return quickClean(trimmed)
         }
+    }
+
+    /// Fast local cleanup for short phrases — no network needed.
+    private func quickClean(_ text: String) -> String {
+        var result = text
+        // Capitalize first letter
+        if let first = result.first {
+            result = first.uppercased() + result.dropFirst()
+        }
+        // Remove common filler words at start
+        let fillers = ["um ", "uh ", "so ", "like ", "well "]
+        for filler in fillers {
+            if result.lowercased().hasPrefix(filler) {
+                result = String(result.dropFirst(filler.count))
+                // Re-capitalize after removing filler
+                if let first = result.first {
+                    result = first.uppercased() + result.dropFirst()
+                }
+            }
+        }
+        // Add period if no ending punctuation
+        if !result.hasSuffix(".") && !result.hasSuffix("!") && !result.hasSuffix("?") {
+            result += "."
+        }
+        return result
     }
 
     // MARK: - API Call
