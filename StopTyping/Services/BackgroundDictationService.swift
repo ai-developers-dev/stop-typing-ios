@@ -3,9 +3,6 @@ import Speech
 import UIKit
 import Foundation
 
-/// Manages the persistent background dictation session.
-/// Keeps the app alive by running the audio engine continuously.
-/// Only attaches speech recognition when the user taps mic.
 final class BackgroundDictationService: ObservableObject {
     static let shared = BackgroundDictationService()
 
@@ -22,15 +19,14 @@ final class BackgroundDictationService: ObservableObject {
     private var currentTranscript = ""
     private let defaults = SharedDefaults.shared
     private let darwin = DarwinNotificationCenter.shared
+    private var audioLevelUpdateCounter = 0
 
     private init() {}
 
     private func log(_ msg: String) {
         print("[BGDictation] \(msg)")
         defaults.appendLog("APP: \(msg)")
-        DispatchQueue.main.async {
-            self.debugLog = self.defaults.debugLog
-        }
+        DispatchQueue.main.async { self.debugLog = self.defaults.debugLog }
     }
 
     // MARK: - Activate Session
@@ -44,19 +40,13 @@ final class BackgroundDictationService: ObservableObject {
         log("Activating session...")
 
         SFSpeechRecognizer.requestAuthorization { [weak self] status in
-            DispatchQueue.main.async {
-                self?.log("Speech auth: \(status.rawValue)")
-            }
+            DispatchQueue.main.async { self?.log("Speech auth: \(status.rawValue)") }
         }
 
-        // Set up audio session
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(
-                .playAndRecord,
-                mode: .measurement,
-                options: [.mixWithOthers, .defaultToSpeaker, .allowBluetooth]
-            )
+            try session.setCategory(.playAndRecord, mode: .measurement,
+                                    options: [.mixWithOthers, .defaultToSpeaker, .allowBluetooth])
             try session.setActive(true, options: .notifyOthersOnDeactivation)
             log("Audio session active")
         } catch {
@@ -64,142 +54,128 @@ final class BackgroundDictationService: ObservableObject {
             return
         }
 
-        // Start audio engine immediately — this keeps the app alive in background.
-        // We capture audio but discard it until startDictation is received.
         startIdleAudioEngine()
 
-        // Start heartbeat
         let timer = DispatchSource.makeTimerSource(queue: .global(qos: .userInitiated))
         timer.schedule(deadline: .now(), repeating: 2.0)
-        timer.setEventHandler { [weak self] in
-            self?.defaults.writeHeartbeat()
-        }
+        timer.setEventHandler { [weak self] in self?.defaults.writeHeartbeat() }
         timer.resume()
         heartbeatTimer = timer
 
         defaults.writeHeartbeat()
         defaults.sessionActive = true
+        defaults.audioLevel = 0
         isSessionActive = true
-        log("Session ACTIVE — audio engine running, heartbeat started")
 
         // Listen for keyboard signals
         darwin.observe(DarwinNotificationName.startDictation) { [weak self] in
-            self?.log("Received startDictation")
+            self?.log("Received: startDictation")
             self?.startRecording()
         }
         darwin.observe(DarwinNotificationName.stopDictation) { [weak self] in
-            self?.log("Received stopDictation")
+            self?.log("Received: stopDictation")
             self?.stopRecording()
         }
+        darwin.observe(DarwinNotificationName.cancelDictation) { [weak self] in
+            self?.log("Received: cancelDictation")
+            self?.cancelRecording()
+        }
 
-        // Clean up on app termination
         NotificationCenter.default.addObserver(
             forName: UIApplication.willTerminateNotification,
             object: nil, queue: .main
-        ) { [weak self] _ in
-            self?.deactivateSession()
-        }
+        ) { [weak self] _ in self?.deactivateSession() }
+
+        log("Session ACTIVE")
     }
 
     // MARK: - Idle Audio Engine
 
-    /// Starts the audio engine with a tap that discards audio.
-    /// This keeps the background audio session truly active so iOS doesn't suspend us.
     private func startIdleAudioEngine() {
+        // Stop any existing engine first
+        if let engine = audioEngine, engine.isRunning {
+            engine.inputNode.removeTap(onBus: 0)
+            engine.stop()
+        }
+
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
 
-        // Install a tap that does nothing — just keeps audio flowing
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: format) { _, _ in
-            // Intentionally empty — audio is discarded in idle mode.
-            // This tap keeps the audio session alive in the background.
+            // Discard audio — just keeping the session alive
         }
 
         engine.prepare()
         do {
             try engine.start()
             self.audioEngine = engine
-            log("Idle audio engine STARTED (keeping app alive)")
+            log("Idle engine started")
         } catch {
-            log("Idle audio engine FAILED: \(error)")
+            log("Idle engine FAILED: \(error)")
         }
     }
 
-    // MARK: - Deactivate Session
+    // MARK: - Deactivate
 
     func deactivateSession() {
         log("Deactivating session")
-        stopRecordingInternal()
-
+        cleanupRecording()
         if let engine = audioEngine, engine.isRunning {
             engine.inputNode.removeTap(onBus: 0)
             engine.stop()
         }
         audioEngine = nil
-
         heartbeatTimer?.cancel()
         heartbeatTimer = nil
         darwin.removeAllObservers()
         defaults.clearSession()
         isSessionActive = false
         try? AVAudioSession.sharedInstance().setActive(false)
-        log("Session deactivated")
     }
 
-    // MARK: - Start Recording (speech recognition)
+    // MARK: - Start Recording
 
     private func startRecording() {
-        guard isSessionActive else {
-            log("Cannot record: session not active")
-            return
-        }
-        guard !isCurrentlyRecording else {
-            log("Already recording")
-            return
-        }
+        guard isSessionActive, !isCurrentlyRecording else { return }
         guard let speechRecognizer, speechRecognizer.isAvailable else {
-            log("Speech recognizer NOT available")
+            log("Speech recognizer unavailable")
             return
         }
 
-        log("Starting speech recognition...")
+        log("Starting recording...")
+
+        do {
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            log("Re-activate failed: \(error)")
+        }
 
         currentTranscript = ""
         defaults.isRecording = true
+        defaults.audioLevel = 0
+        audioLevelUpdateCounter = 0
         DispatchQueue.main.async { self.isCurrentlyRecording = true }
 
-        // Stop idle engine — we'll restart with speech recognition
+        // Stop idle engine
         if let engine = audioEngine, engine.isRunning {
             engine.inputNode.removeTap(onBus: 0)
             engine.stop()
-            log("Stopped idle engine")
         }
 
-        // Create fresh engine for recording
         let engine = AVAudioEngine()
         self.audioEngine = engine
 
         recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
-        guard let recognitionRequest else {
-            log("Failed to create recognition request")
-            return
-        }
+        guard let recognitionRequest else { return }
         recognitionRequest.shouldReportPartialResults = true
-
         if speechRecognizer.supportsOnDeviceRecognition {
             recognitionRequest.requiresOnDeviceRecognition = true
-            log("On-device recognition")
         }
 
         recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
-            guard let self else { return }
-            if let result {
-                self.currentTranscript = result.bestTranscription.formattedString
-            }
-            if let error {
-                self.log("Recognition error: \(error.localizedDescription)")
-            }
+            if let result { self?.currentTranscript = result.bestTranscription.formattedString }
+            if let error { self?.log("Recognition error: \(error.localizedDescription)") }
         }
 
         let inputNode = engine.inputNode
@@ -207,64 +183,110 @@ final class BackgroundDictationService: ObservableObject {
 
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
             self?.recognitionRequest?.append(buffer)
+            // Compute audio level and write to App Group every ~5th callback (~200ms)
+            self?.updateAudioLevel(buffer: buffer)
         }
 
         engine.prepare()
         do {
             try engine.start()
-            log("Recording engine STARTED — listening for speech")
+            log("Recording engine STARTED")
         } catch {
             log("Recording engine FAILED: \(error)")
             defaults.isRecording = false
             DispatchQueue.main.async { self.isCurrentlyRecording = false }
+            startIdleAudioEngine()
         }
     }
 
-    // MARK: - Stop Recording
+    // MARK: - Audio Level Metering
+
+    private func updateAudioLevel(buffer: AVAudioPCMBuffer) {
+        audioLevelUpdateCounter += 1
+        // Only update every 5th buffer (~200ms at 1024 samples/44100Hz)
+        guard audioLevelUpdateCounter % 5 == 0 else { return }
+
+        guard let channelData = buffer.floatChannelData?[0] else { return }
+        let frameLength = Int(buffer.frameLength)
+        guard frameLength > 0 else { return }
+
+        var sum: Float = 0
+        for i in 0..<frameLength {
+            let sample = channelData[i]
+            sum += sample * sample
+        }
+        let rms = sqrt(sum / Float(frameLength))
+        // Normalize: rms of speech is typically 0.01-0.3, scale to 0-1
+        let level = min(1.0, rms * 5.0)
+        defaults.audioLevel = level
+    }
+
+    // MARK: - Stop Recording (save transcript)
 
     private func stopRecording() {
-        log("Stopping recording...")
-        stopRecordingInternal()
+        guard isCurrentlyRecording else {
+            log("Not recording, nothing to stop")
+            return
+        }
 
-        // Wait for final results
+        log("Stopping recording (save)...")
+        stopEngine()
+        recognitionRequest?.endAudio()
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
             guard let self else { return }
-
             let transcript = self.currentTranscript
-            self.log("Final transcript: '\(transcript.prefix(80))'")
+            self.log("Final: '\(transcript.prefix(80))'")
 
-            self.recognitionTask?.cancel()
-            self.recognitionTask = nil
-            self.recognitionRequest = nil
-
-            self.defaults.isRecording = false
-            self.isCurrentlyRecording = false
+            self.cleanupRecording()
 
             if !transcript.isEmpty {
                 self.lastTranscript = transcript
                 self.defaults.saveTranscript(transcript)
-                self.log("Saved to App Group")
-
                 DispatchQueue.main.async {
                     TranscriptHistoryStore.shared.add(TranscriptItem(text: transcript))
                 }
-
                 self.darwin.post(DarwinNotificationName.transcriptReady)
-                self.log("Posted transcriptReady")
+                self.log("Transcript saved, notified keyboard")
             } else {
                 self.log("Empty transcript")
             }
 
-            // Restart idle engine to keep app alive
+            self.defaults.audioLevel = 0
             self.startIdleAudioEngine()
         }
     }
 
-    private func stopRecordingInternal() {
+    // MARK: - Cancel Recording (discard, restart immediately)
+
+    private func cancelRecording() {
+        guard isCurrentlyRecording else { return }
+
+        log("Canceling recording (discard)")
+        stopEngine()
+        cleanupRecording()
+        defaults.audioLevel = 0
+
+        // Restart idle engine immediately — no delay
+        startIdleAudioEngine()
+        log("Cancel complete, idle engine restarted")
+    }
+
+    // MARK: - Helpers
+
+    private func stopEngine() {
         if let engine = audioEngine, engine.isRunning {
             engine.inputNode.removeTap(onBus: 0)
             engine.stop()
         }
-        recognitionRequest?.endAudio()
+    }
+
+    private func cleanupRecording() {
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        recognitionRequest = nil
+        defaults.isRecording = false
+        currentTranscript = ""
+        DispatchQueue.main.async { self.isCurrentlyRecording = false }
     }
 }

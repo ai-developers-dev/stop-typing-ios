@@ -12,4 +12,5 @@ enum AppGroupConfig {
     static let heartbeatKey = "sessionHeartbeat"
     static let isRecordingKey = "isRecording"
     static let sessionActiveKey = "sessionActive"
+    static let audioLevelKey = "audioLevel"
 }

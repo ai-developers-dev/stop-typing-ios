@@ -6,7 +6,11 @@ import SwiftUI
 struct DictationOverlayView: View {
     @ObservedObject private var service = BackgroundDictationService.shared
     @Environment(\.dismiss) private var dismiss
-    var onClose: (() -> Void)?
+    let onClose: () -> Void
+
+    init(onClose: @escaping () -> Void = {}) {
+        self.onClose = onClose
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -15,12 +19,13 @@ struct DictationOverlayView: View {
                 Spacer()
                 Button {
                     service.deactivateSession()
-                    onClose?()
+                    onClose()
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(Color(UIColor.secondaryLabel))
-                        .frame(width: 36, height: 36)
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundStyle(Color(UIColor.label))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
             }
             .padding(.horizontal, 20)

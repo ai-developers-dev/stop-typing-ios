@@ -5,6 +5,7 @@ import Foundation
 enum DarwinNotificationName {
     static let startDictation = "com.stormacq.StopTypingiOS.startDictation"
     static let stopDictation = "com.stormacq.StopTypingiOS.stopDictation"
+    static let cancelDictation = "com.stormacq.StopTypingiOS.cancelDictation"
     static let transcriptReady = "com.stormacq.StopTypingiOS.transcriptReady"
 }
 

@@ -91,10 +91,23 @@ final class SharedDefaults {
         defaults.synchronize()
     }
 
+    /// Audio level (0.0 to 1.0) written by the app, read by the keyboard for waveform visualization.
+    var audioLevel: Float {
+        get {
+            defaults.synchronize()
+            return defaults.float(forKey: AppGroupConfig.audioLevelKey)
+        }
+        set {
+            defaults.set(newValue, forKey: AppGroupConfig.audioLevelKey)
+            defaults.synchronize()
+        }
+    }
+
     func clearSession() {
         heartbeat = nil
         isRecording = false
         sessionActive = false
+        audioLevel = 0
     }
 
     // MARK: - Debug Log (persists to App Group so both app and keyboard can read)

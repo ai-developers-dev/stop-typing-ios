@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Main SwiftUI view for the Stop Typing keyboard extension.
 struct KeyboardRootView: View {
     let onInsertText: (String) -> Void
     let onDeleteBackward: () -> Void
@@ -9,6 +8,7 @@ struct KeyboardRootView: View {
     let onOpenApp: () -> Void
     let onStartDictation: () -> Void
     let onStopDictation: () -> Void
+    let onCancelDictation: () -> Void
     var showGlobe: Bool = true
     @Binding var isAppAlive: Bool
     @Binding var isRecording: Bool
@@ -16,6 +16,9 @@ struct KeyboardRootView: View {
     @State private var isShifted = false
     @State private var showNumbers = false
     @State private var selectedMode = "Formal"
+    @State private var waveformBars: [CGFloat] = Array(repeating: 4, count: 11)
+    @State private var waveformTimer: Timer?
+    @State private var deleteTimer: Timer?
 
     private let modes = ["Formal", "Casual", "Friendly", "Short"]
 
@@ -31,12 +34,23 @@ struct KeyboardRootView: View {
         [".", ",", "?", "!", "'"],
     ]
 
+    // Design constants
+    private let keyH: CGFloat = 43
+    private let keySpaceH: CGFloat = 6
+    private let keySpaceV: CGFloat = 11
+    private let keyRadius: CGFloat = 5
+    private let letterFont: CGFloat = 23
+    private let utilWidth: CGFloat = 44
+    private let padH: CGFloat = 3
+    private let darkBg = Color(red: 0.2, green: 0.2, blue: 0.2) // #333
+
     var body: some View {
         VStack(spacing: 0) {
+            // Toolbar
             toolbarView
-                .padding(.horizontal, 4)
-                .padding(.top, 6)
-                .padding(.bottom, 4)
+                .padding(.horizontal, 6)
+                .padding(.top, 8)
+                .padding(.bottom, 6)
 
             if !isRecording {
                 if showNumbers {
@@ -44,83 +58,72 @@ struct KeyboardRootView: View {
                 } else {
                     lettersView
                 }
-
                 bottomRow
-                    .padding(.bottom, 2)
+                    .padding(.top, keySpaceV)
+                    .padding(.bottom, 4)
             }
         }
-        .background(Color(UIColor.systemGray5))
+        .background(Color(UIColor.systemGray6))
     }
 
-    // MARK: - Toolbar (3 states)
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // MARK: - Toolbar
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private var toolbarView: some View {
         Group {
             if isRecording {
-                // State C: Recording active
                 recordingToolbar
             } else if isAppAlive {
-                // State B: App alive, ready to record
                 activeToolbar
             } else {
-                // State A: App not running
                 inactiveToolbar
             }
         }
     }
 
-    // State A: App not running — show "Start ST"
+    // State A: App not running
     private var inactiveToolbar: some View {
         HStack(spacing: 8) {
-            // Insert latest transcript
             Button {
                 let state = SharedKeyboardState.load()
-                if let transcript = state.transcript, !transcript.isEmpty {
-                    onInsertText(transcript)
-                }
+                if let t = state.transcript, !t.isEmpty { onInsertText(t) }
             } label: {
                 Image(systemName: "slider.horizontal.3")
-                    .font(.system(size: 18))
+                    .font(.system(size: 20))
                     .foregroundStyle(Color(UIColor.label))
                     .frame(width: 36, height: 36)
             }
 
             Spacer()
 
-            // Start ST button
-            Button {
-                onOpenApp()
-            } label: {
+            Button { onOpenApp() } label: {
                 Text("Start ST")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-                    .background(Color(UIColor.darkGray))
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 14)
+                    .background(darkBg)
                     .clipShape(Capsule())
             }
         }
     }
 
-    // State B: App alive — show mode selector + mic
+    // State B: App alive
     private var activeToolbar: some View {
         HStack(spacing: 8) {
-            // Insert latest transcript
             Button {
                 let state = SharedKeyboardState.load()
-                if let transcript = state.transcript, !transcript.isEmpty {
-                    onInsertText(transcript)
-                }
+                if let t = state.transcript, !t.isEmpty { onInsertText(t) }
             } label: {
                 Image(systemName: "slider.horizontal.3")
-                    .font(.system(size: 18))
+                    .font(.system(size: 20))
                     .foregroundStyle(Color(UIColor.label))
                     .frame(width: 36, height: 36)
             }
 
             Spacer()
 
-            // Mode selector
             Menu {
                 ForEach(modes, id: \.self) { mode in
                     Button {
@@ -128,9 +131,7 @@ struct KeyboardRootView: View {
                     } label: {
                         HStack {
                             Text(mode)
-                            if mode == selectedMode {
-                                Image(systemName: "checkmark")
-                            }
+                            if mode == selectedMode { Image(systemName: "checkmark") }
                         }
                     }
                 }
@@ -143,221 +144,224 @@ struct KeyboardRootView: View {
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(Color(UIColor.secondaryLabel))
                 }
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 14)
                 .padding(.vertical, 8)
                 .background(Color(UIColor.systemGray4))
                 .clipShape(Capsule())
             }
 
-            // Mic button — start recording
-            Button {
-                onStartDictation()
-            } label: {
+            Button { onStartDictation() } label: {
                 Image(systemName: "mic.fill")
                     .font(.system(size: 18))
                     .foregroundStyle(.white)
-                    .frame(width: 40, height: 40)
-                    .background(Color(UIColor.darkGray))
+                    .frame(width: 44, height: 44)
+                    .background(darkBg)
                     .clipShape(Circle())
             }
         }
     }
 
-    // State C: Recording — show cancel, listening, done
+    // State C: Recording
     private var recordingToolbar: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 16) {
-                // Cancel
-                Button {
-                    onStopDictation()
-                } label: {
+        VStack(spacing: 16) {
+            HStack {
+                Button { onCancelDictation() } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 16, weight: .medium))
+                        .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(Color(UIColor.label))
-                        .frame(width: 36, height: 36)
+                        .frame(width: 34, height: 34)
                         .background(Color(UIColor.systemGray4))
                         .clipShape(Circle())
                 }
 
                 Spacer()
 
-                // Mode label
                 Text(selectedMode)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(Color(UIColor.secondaryLabel))
 
-                // Done — stop and insert
-                Button {
-                    onStopDictation()
-                } label: {
+                Button { onStopDictation() } label: {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(.white)
-                        .frame(width: 36, height: 36)
-                        .background(Color(UIColor.darkGray))
+                        .frame(width: 34, height: 34)
+                        .background(darkBg)
                         .clipShape(Circle())
                 }
             }
 
-            // Waveform dots
-            HStack(spacing: 4) {
-                ForEach(0..<9, id: \.self) { _ in
-                    Circle()
+            // Audio-reactive waveform bars
+            HStack(spacing: 3) {
+                ForEach(0..<11, id: \.self) { i in
+                    RoundedRectangle(cornerRadius: 1.5)
                         .fill(Color(UIColor.label))
-                        .frame(width: 6, height: 6)
-                        .opacity(Double.random(in: 0.3...1.0))
+                        .frame(width: 3, height: waveformBars[i])
+                        .animation(.easeOut(duration: 0.15), value: waveformBars[i])
                 }
             }
+            .onAppear { startWaveformPolling() }
+            .onDisappear { stopWaveformPolling() }
 
-            Text("Listening")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(Color(UIColor.label))
-            Text("iPhone Microphone")
-                .font(.system(size: 13))
-                .foregroundStyle(Color(UIColor.secondaryLabel))
+            VStack(spacing: 2) {
+                Text("Listening")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(Color(UIColor.label))
+                Text("iPhone Microphone")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color(UIColor.secondaryLabel))
+            }
 
-            Spacer().frame(height: 40)
+            Spacer().frame(height: 30)
         }
         .padding(.top, 8)
     }
 
-    // MARK: - Letters View
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // MARK: - Letters
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private var lettersView: some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 4) {
+        VStack(spacing: keySpaceV) {
+            // Row 1
+            HStack(spacing: keySpaceH) {
                 ForEach(letterRows[0], id: \.self) { key in
-                    LetterKey(label: isShifted ? key.uppercased() : key) { tapKey(key) }
+                    letterKey(isShifted ? key.uppercased() : key) { tapKey(key) }
                 }
             }
+            .padding(.horizontal, padH)
 
-            HStack(spacing: 4) {
+            // Row 2 — indented
+            HStack(spacing: keySpaceH) {
                 ForEach(letterRows[1], id: \.self) { key in
-                    LetterKey(label: isShifted ? key.uppercased() : key) { tapKey(key) }
+                    letterKey(isShifted ? key.uppercased() : key) { tapKey(key) }
                 }
             }
+            .padding(.horizontal, padH + 16)
 
-            HStack(spacing: 4) {
+            // Row 3 — shift + keys + delete
+            HStack(spacing: keySpaceH) {
                 Button { isShifted.toggle() } label: {
                     Image(systemName: isShifted ? "shift.fill" : "shift")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundStyle(Color(UIColor.label))
-                        .frame(width: 42, height: 42)
-                        .background(isShifted ? Color(UIColor.systemGray3) : Color(UIColor.systemGray2))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .frame(width: utilWidth, height: keyH)
+                        .background(Color(UIColor.systemGray3))
+                        .clipShape(RoundedRectangle(cornerRadius: keyRadius))
                 }
 
                 ForEach(letterRows[2], id: \.self) { key in
-                    LetterKey(label: isShifted ? key.uppercased() : key) { tapKey(key) }
+                    letterKey(isShifted ? key.uppercased() : key) { tapKey(key) }
                 }
 
-                Button { onDeleteBackward() } label: {
-                    Image(systemName: "delete.left")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(Color(UIColor.label))
-                        .frame(width: 42, height: 42)
-                        .background(Color(UIColor.systemGray2))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                }
+                deleteKey
             }
+            .padding(.horizontal, padH)
         }
-        .padding(.horizontal, 3)
     }
 
-    // MARK: - Numbers View
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // MARK: - Numbers
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private var numbersView: some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 4) {
+        VStack(spacing: keySpaceV) {
+            HStack(spacing: keySpaceH) {
                 ForEach(numberRows[0], id: \.self) { key in
-                    LetterKey(label: key) { onInsertText(key) }
+                    letterKey(key) { onInsertText(key) }
                 }
             }
-            HStack(spacing: 4) {
+            .padding(.horizontal, padH)
+
+            HStack(spacing: keySpaceH) {
                 ForEach(numberRows[1], id: \.self) { key in
-                    LetterKey(label: key) { onInsertText(key) }
+                    letterKey(key) { onInsertText(key) }
                 }
             }
-            HStack(spacing: 4) {
+            .padding(.horizontal, padH)
+
+            HStack(spacing: keySpaceH) {
                 Spacer()
                 ForEach(numberRows[2], id: \.self) { key in
-                    LetterKey(label: key) { onInsertText(key) }
+                    letterKey(key) { onInsertText(key) }
                 }
-                Button { onDeleteBackward() } label: {
-                    Image(systemName: "delete.left")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(Color(UIColor.label))
-                        .frame(width: 42, height: 42)
-                        .background(Color(UIColor.systemGray2))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                }
+                deleteKey
                 Spacer()
             }
+            .padding(.horizontal, padH)
         }
-        .padding(.horizontal, 3)
     }
 
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // MARK: - Bottom Row
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private var bottomRow: some View {
-        VStack(spacing: 4) {
-            HStack(spacing: 5) {
-                Button { showNumbers.toggle() } label: {
-                    Text(showNumbers ? "ABC" : "123")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(Color(UIColor.label))
-                        .frame(width: 48, height: 42)
-                        .background(Color(UIColor.systemGray2))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                }
-
-                Button { onInsertText(" ") } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "waveform")
-                            .font(.system(size: 12))
-                            .foregroundStyle(Color(UIColor.tertiaryLabel))
-                        Text("Stop Typing")
-                            .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(Color(UIColor.tertiaryLabel))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 42)
-                    .background(Color(UIColor.systemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                }
-
-                Button { onInsertText(".") } label: {
-                    Text(".")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundStyle(Color(UIColor.label))
-                        .frame(width: 44, height: 42)
-                        .background(Color(UIColor.systemGray2))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                }
-
-                Button { onReturnKey() } label: {
-                    Image(systemName: "return")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(Color(UIColor.label))
-                        .frame(width: 48, height: 42)
-                        .background(Color(UIColor.systemGray2))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                }
+        HStack(spacing: keySpaceH) {
+            // 123
+            Button { showNumbers.toggle() } label: {
+                Text(showNumbers ? "ABC" : "123")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(Color(UIColor.label))
+                    .frame(width: 50, height: keyH)
+                    .background(Color(UIColor.systemGray3))
+                    .clipShape(RoundedRectangle(cornerRadius: keyRadius))
             }
 
-            if showGlobe {
-                HStack {
-                    Button { onNextKeyboard() } label: {
-                        Image(systemName: "globe")
-                            .font(.system(size: 18))
-                            .foregroundStyle(Color(UIColor.secondaryLabel))
-                            .frame(width: 30, height: 28)
-                    }
-                    Spacer()
+            // Spacebar
+            Button { onInsertText(" ") } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "waveform")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color(UIColor.tertiaryLabel))
+                    Text("ST")
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(Color(UIColor.tertiaryLabel))
                 }
+                .frame(maxWidth: .infinity)
+                .frame(height: keyH)
+                .background(Color(UIColor.systemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: keyRadius))
+                .shadow(color: .black.opacity(0.2), radius: 0.5, x: 0, y: 1)
+            }
+
+            // Period
+            Button { onInsertText(".") } label: {
+                Text(".")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(Color(UIColor.label))
+                    .frame(width: 44, height: keyH)
+                    .background(Color(UIColor.systemGray3))
+                    .clipShape(RoundedRectangle(cornerRadius: keyRadius))
+            }
+
+            // Return
+            Button { onReturnKey() } label: {
+                Image(systemName: "return")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(Color(UIColor.label))
+                    .frame(width: 50, height: keyH)
+                    .background(Color(UIColor.systemGray3))
+                    .clipShape(RoundedRectangle(cornerRadius: keyRadius))
             }
         }
-        .padding(.horizontal, 3)
+        .padding(.horizontal, padH)
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // MARK: - Key Builder
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    private func letterKey(_ label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: letterFont, weight: .regular))
+                .foregroundStyle(Color(UIColor.label))
+                .frame(maxWidth: .infinity)
+                .frame(height: keyH)
+                .background(Color(UIColor.systemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: keyRadius))
+                .shadow(color: .black.opacity(0.2), radius: 0.5, x: 0, y: 1)
+        }
     }
 
     private func tapKey(_ key: String) {
@@ -365,24 +369,58 @@ struct KeyboardRootView: View {
         onInsertText(char)
         if isShifted { isShifted = false }
     }
-}
 
-// MARK: - Letter Key
+    // MARK: - Waveform
 
-struct LetterKey: View {
-    let label: String
-    let onTap: () -> Void
-
-    var body: some View {
-        Button(action: onTap) {
-            Text(label)
-                .font(.system(size: 22, weight: .regular))
-                .foregroundStyle(Color(UIColor.label))
-                .frame(maxWidth: .infinity)
-                .frame(height: 42)
-                .background(Color(UIColor.systemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .shadow(color: .black.opacity(0.15), radius: 0.5, x: 0, y: 0.5)
+    private func startWaveformPolling() {
+        waveformTimer?.invalidate()
+        waveformTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { _ in
+            let level = CGFloat(SharedDefaults.shared.audioLevel)
+            // Generate bars based on real audio level with some randomness for natural feel
+            var newBars: [CGFloat] = []
+            // Pattern: outer bars shorter, inner bars taller
+            let pattern: [CGFloat] = [0.5, 0.3, 0.6, 0.2, 1.0, 0.2, 0.3, 1.0, 0.2, 0.6, 0.3]
+            for i in 0..<11 {
+                let base: CGFloat = 4 // minimum height when silent
+                let maxHeight: CGFloat = 36
+                let randomJitter = CGFloat.random(in: -0.1...0.1)
+                let barLevel = max(0, min(1, level * pattern[i] + randomJitter))
+                newBars.append(base + barLevel * (maxHeight - base))
+            }
+            waveformBars = newBars
         }
+    }
+
+    private func stopWaveformPolling() {
+        waveformTimer?.invalidate()
+        waveformTimer = nil
+        waveformBars = Array(repeating: 4, count: 11)
+    }
+
+    // MARK: - Delete Key (hold to repeat)
+
+    private var deleteKey: some View {
+        Image(systemName: "delete.left")
+            .font(.system(size: 16, weight: .medium))
+            .foregroundStyle(Color(UIColor.label))
+            .frame(width: utilWidth, height: keyH)
+            .background(Color(UIColor.systemGray3))
+            .clipShape(RoundedRectangle(cornerRadius: keyRadius))
+            .onTapGesture {
+                onDeleteBackward()
+            }
+            .onLongPressGesture(minimumDuration: 0.3, pressing: { pressing in
+                if pressing {
+                    // Start repeating delete
+                    deleteTimer?.invalidate()
+                    deleteTimer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { _ in
+                        onDeleteBackward()
+                    }
+                } else {
+                    // Stop repeating
+                    deleteTimer?.invalidate()
+                    deleteTimer = nil
+                }
+            }, perform: {})
     }
 }

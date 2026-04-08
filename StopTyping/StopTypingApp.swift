@@ -21,9 +21,9 @@ struct StopTypingApp: App {
                 }
 
                 if showDictationActivation {
-                    DictationOverlayView {
-                        showDictationActivation = false
-                    }
+                    DictationOverlayView(onClose: {
+                        withAnimation { showDictationActivation = false }
+                    })
                     .zIndex(100)
                 }
             }

@@ -88,6 +88,9 @@ class KeyboardViewController: UIInputViewController {
             onStopDictation: { [weak self] in
                 self?.stopDictation()
             },
+            onCancelDictation: { [weak self] in
+                self?.cancelDictation()
+            },
             showGlobe: needsInputModeSwitchKey,
             isAppAlive: appAliveBinding,
             isRecording: recordingBinding
@@ -177,6 +180,9 @@ class KeyboardViewController: UIInputViewController {
             onStopDictation: { [weak self] in
                 self?.stopDictation()
             },
+            onCancelDictation: { [weak self] in
+                self?.cancelDictation()
+            },
             showGlobe: needsInputModeSwitchKey,
             isAppAlive: appAliveBinding,
             isRecording: recordingBinding
@@ -213,9 +219,16 @@ class KeyboardViewController: UIInputViewController {
     }
 
     private func stopDictation() {
-        klog("STOP dictation")
+        klog("STOP dictation (save)")
         darwin.post(DarwinNotificationName.stopDictation)
         // Don't set isRecording=false yet — wait for transcriptReady
+    }
+
+    private func cancelDictation() {
+        klog("CANCEL dictation (discard)")
+        darwin.post(DarwinNotificationName.cancelDictation)
+        isRecording = false
+        rebuildView()
     }
 
     private func onTranscriptReady() {
