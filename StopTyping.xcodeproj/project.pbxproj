@@ -1,0 +1,661 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		AA000001 /* StopTypingApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000001 /* StopTypingApp.swift */; };
+		AA000002 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000002 /* AppTheme.swift */; };
+		AA000003 /* TranscriptItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000003 /* TranscriptItem.swift */; };
+		AA000004 /* RewriteMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000004 /* RewriteMode.swift */; };
+		AA000005 /* UserSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000005 /* UserSettings.swift */; };
+		AA000006 /* PermissionsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000006 /* PermissionsManager.swift */; };
+		AA000007 /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000007 /* TranscriptionService.swift */; };
+		AA000008 /* AppleSpeechService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000008 /* AppleSpeechService.swift */; };
+		AA000009 /* RemoteTranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000009 /* RemoteTranscriptionService.swift */; };
+		AA000010 /* RewriteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000010 /* RewriteService.swift */; };
+		AA000011 /* LocalRewriteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000011 /* LocalRewriteService.swift */; };
+		AA000012 /* RemoteRewriteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000012 /* RemoteRewriteService.swift */; };
+		AA000013 /* SharedStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000013 /* SharedStateManager.swift */; };
+		AA000014 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000014 /* HomeView.swift */; };
+		AA000015 /* HomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000015 /* HomeViewModel.swift */; };
+		AA000016 /* RecordingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000016 /* RecordingView.swift */; };
+		AA000017 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000017 /* HistoryView.swift */; };
+		AA000018 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000018 /* SettingsView.swift */; };
+		AA000019 /* KeyboardSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000019 /* KeyboardSetupView.swift */; };
+		AA000020 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000020 /* OnboardingView.swift */; };
+		AA000024 /* OnboardingComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000024 /* OnboardingComponents.swift */; };
+		AA000021 /* PrimaryButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000021 /* PrimaryButton.swift */; };
+		AA000022 /* TranscriptCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000022 /* TranscriptCard.swift */; };
+		AA000023 /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000023 /* EmptyStateView.swift */; };
+		AA000030 /* AppGroupConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000030 /* AppGroupConfig.swift */; };
+		AA000031 /* SharedDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000031 /* SharedDefaults.swift */; };
+		AA000032 /* SharedKeyboardState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000032 /* SharedKeyboardState.swift */; };
+		AA000040 /* AppGroupConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000030 /* AppGroupConfig.swift */; };
+		AA000041 /* SharedDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000031 /* SharedDefaults.swift */; };
+		AA000042 /* SharedKeyboardState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000032 /* SharedKeyboardState.swift */; };
+		AA000050 /* KeyboardViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000050 /* KeyboardViewController.swift */; };
+		AA000060 /* StopTypingKeyboard.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = DD000002 /* StopTypingKeyboard.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		CC000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD000001;
+			remoteInfo = StopTypingKeyboard;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		FF000001 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				AA000060 /* StopTypingKeyboard.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		BB000001 /* StopTypingApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StopTypingApp.swift; sourceTree = "<group>"; };
+		BB000002 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
+		BB000003 /* TranscriptItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptItem.swift; sourceTree = "<group>"; };
+		BB000004 /* RewriteMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewriteMode.swift; sourceTree = "<group>"; };
+		BB000005 /* UserSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSettings.swift; sourceTree = "<group>"; };
+		BB000006 /* PermissionsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionsManager.swift; sourceTree = "<group>"; };
+		BB000007 /* TranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionService.swift; sourceTree = "<group>"; };
+		BB000008 /* AppleSpeechService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSpeechService.swift; sourceTree = "<group>"; };
+		BB000009 /* RemoteTranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteTranscriptionService.swift; sourceTree = "<group>"; };
+		BB000010 /* RewriteService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewriteService.swift; sourceTree = "<group>"; };
+		BB000011 /* LocalRewriteService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalRewriteService.swift; sourceTree = "<group>"; };
+		BB000012 /* RemoteRewriteService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteRewriteService.swift; sourceTree = "<group>"; };
+		BB000013 /* SharedStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedStateManager.swift; sourceTree = "<group>"; };
+		BB000014 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		BB000015 /* HomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeViewModel.swift; sourceTree = "<group>"; };
+		BB000016 /* RecordingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingView.swift; sourceTree = "<group>"; };
+		BB000017 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
+		BB000018 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		BB000019 /* KeyboardSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardSetupView.swift; sourceTree = "<group>"; };
+		BB000020 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		BB000024 /* OnboardingComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingComponents.swift; sourceTree = "<group>"; };
+		BB000021 /* PrimaryButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrimaryButton.swift; sourceTree = "<group>"; };
+		BB000022 /* TranscriptCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptCard.swift; sourceTree = "<group>"; };
+		BB000023 /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
+		BB000030 /* AppGroupConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppGroupConfig.swift; sourceTree = "<group>"; };
+		BB000031 /* SharedDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedDefaults.swift; sourceTree = "<group>"; };
+		BB000032 /* SharedKeyboardState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedKeyboardState.swift; sourceTree = "<group>"; };
+		BB000050 /* KeyboardViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardViewController.swift; sourceTree = "<group>"; };
+		BB000070 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		BB000071 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		DD000002 /* StopTypingKeyboard.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = StopTypingKeyboard.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		DD000003 /* StopTyping.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StopTyping.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		11000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		11000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		GG000001 = {
+			isa = PBXGroup;
+			children = (
+				GG000002 /* StopTyping */,
+				GG000020 /* StopTypingKeyboard */,
+				GG000030 /* Shared */,
+				GG000099 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		GG000002 /* StopTyping */ = {
+			isa = PBXGroup;
+			children = (
+				BB000001 /* StopTypingApp.swift */,
+				BB000070 /* Info.plist */,
+				GG000003 /* Theme */,
+				GG000004 /* Models */,
+				GG000005 /* Services */,
+				GG000010 /* Features */,
+				GG000015 /* Components */,
+			);
+			path = StopTyping;
+			sourceTree = "<group>";
+		};
+		GG000003 /* Theme */ = {
+			isa = PBXGroup;
+			children = (
+				BB000002 /* AppTheme.swift */,
+			);
+			path = Theme;
+			sourceTree = "<group>";
+		};
+		GG000004 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				BB000003 /* TranscriptItem.swift */,
+				BB000004 /* RewriteMode.swift */,
+				BB000005 /* UserSettings.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		GG000005 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				BB000006 /* PermissionsManager.swift */,
+				BB000013 /* SharedStateManager.swift */,
+				GG000006 /* Transcription */,
+				GG000007 /* Rewrite */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		GG000006 /* Transcription */ = {
+			isa = PBXGroup;
+			children = (
+				BB000007 /* TranscriptionService.swift */,
+				BB000008 /* AppleSpeechService.swift */,
+				BB000009 /* RemoteTranscriptionService.swift */,
+			);
+			path = Transcription;
+			sourceTree = "<group>";
+		};
+		GG000007 /* Rewrite */ = {
+			isa = PBXGroup;
+			children = (
+				BB000010 /* RewriteService.swift */,
+				BB000011 /* LocalRewriteService.swift */,
+				BB000012 /* RemoteRewriteService.swift */,
+			);
+			path = Rewrite;
+			sourceTree = "<group>";
+		};
+		GG000010 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				GG000011 /* Onboarding */,
+				GG000012 /* Home */,
+				GG000013 /* Recording */,
+				GG000014 /* TranscriptHistory */,
+				GG000016 /* Settings */,
+				GG000017 /* KeyboardSetup */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		GG000011 /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				BB000020 /* OnboardingView.swift */,
+				BB000024 /* OnboardingComponents.swift */,
+			);
+			path = Onboarding;
+			sourceTree = "<group>";
+		};
+		GG000012 /* Home */ = {
+			isa = PBXGroup;
+			children = (
+				BB000014 /* HomeView.swift */,
+				BB000015 /* HomeViewModel.swift */,
+			);
+			path = Home;
+			sourceTree = "<group>";
+		};
+		GG000013 /* Recording */ = {
+			isa = PBXGroup;
+			children = (
+				BB000016 /* RecordingView.swift */,
+			);
+			path = Recording;
+			sourceTree = "<group>";
+		};
+		GG000014 /* TranscriptHistory */ = {
+			isa = PBXGroup;
+			children = (
+				BB000017 /* HistoryView.swift */,
+			);
+			path = TranscriptHistory;
+			sourceTree = "<group>";
+		};
+		GG000015 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				BB000021 /* PrimaryButton.swift */,
+				BB000022 /* TranscriptCard.swift */,
+				BB000023 /* EmptyStateView.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		GG000016 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				BB000018 /* SettingsView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		GG000017 /* KeyboardSetup */ = {
+			isa = PBXGroup;
+			children = (
+				BB000019 /* KeyboardSetupView.swift */,
+			);
+			path = KeyboardSetup;
+			sourceTree = "<group>";
+		};
+		GG000020 /* StopTypingKeyboard */ = {
+			isa = PBXGroup;
+			children = (
+				BB000050 /* KeyboardViewController.swift */,
+				BB000071 /* Info.plist */,
+				GG000021 /* Components */,
+			);
+			path = StopTypingKeyboard;
+			sourceTree = "<group>";
+		};
+		GG000021 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		GG000030 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				BB000030 /* AppGroupConfig.swift */,
+				BB000031 /* SharedDefaults.swift */,
+				BB000032 /* SharedKeyboardState.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		GG000099 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				DD000003 /* StopTyping.app */,
+				DD000002 /* StopTypingKeyboard.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		DD000000 /* StopTyping */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 22000001 /* Build configuration list for PBXNativeTarget "StopTyping" */;
+			buildPhases = (
+				33000001 /* Sources */,
+				11000001 /* Frameworks */,
+				FF000001 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				CC000002 /* PBXTargetDependency */,
+			);
+			name = StopTyping;
+			productName = StopTyping;
+			productReference = DD000003 /* StopTyping.app */;
+			productType = "com.apple.product-type.application";
+		};
+		DD000001 /* StopTypingKeyboard */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 22000002 /* Build configuration list for PBXNativeTarget "StopTypingKeyboard" */;
+			buildPhases = (
+				33000002 /* Sources */,
+				11000002 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = StopTypingKeyboard;
+			productName = StopTypingKeyboard;
+			productReference = DD000002 /* StopTypingKeyboard.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		EE000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1540;
+				LastUpgradeCheck = 2640;
+				TargetAttributes = {
+					DD000000 = {
+						CreatedOnToolsVersion = 15.4;
+					};
+					DD000001 = {
+						CreatedOnToolsVersion = 15.4;
+					};
+				};
+			};
+			buildConfigurationList = 22000003 /* Build configuration list for PBXProject "StopTyping" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = GG000001;
+			productRefGroup = GG000099 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				DD000000 /* StopTyping */,
+				DD000001 /* StopTypingKeyboard */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		33000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA000001 /* StopTypingApp.swift in Sources */,
+				AA000002 /* AppTheme.swift in Sources */,
+				AA000003 /* TranscriptItem.swift in Sources */,
+				AA000004 /* RewriteMode.swift in Sources */,
+				AA000005 /* UserSettings.swift in Sources */,
+				AA000006 /* PermissionsManager.swift in Sources */,
+				AA000007 /* TranscriptionService.swift in Sources */,
+				AA000008 /* AppleSpeechService.swift in Sources */,
+				AA000009 /* RemoteTranscriptionService.swift in Sources */,
+				AA000010 /* RewriteService.swift in Sources */,
+				AA000011 /* LocalRewriteService.swift in Sources */,
+				AA000012 /* RemoteRewriteService.swift in Sources */,
+				AA000013 /* SharedStateManager.swift in Sources */,
+				AA000014 /* HomeView.swift in Sources */,
+				AA000015 /* HomeViewModel.swift in Sources */,
+				AA000016 /* RecordingView.swift in Sources */,
+				AA000017 /* HistoryView.swift in Sources */,
+				AA000018 /* SettingsView.swift in Sources */,
+				AA000019 /* KeyboardSetupView.swift in Sources */,
+				AA000020 /* OnboardingView.swift in Sources */,
+				AA000024 /* OnboardingComponents.swift in Sources */,
+				AA000021 /* PrimaryButton.swift in Sources */,
+				AA000022 /* TranscriptCard.swift in Sources */,
+				AA000023 /* EmptyStateView.swift in Sources */,
+				AA000030 /* AppGroupConfig.swift in Sources */,
+				AA000031 /* SharedDefaults.swift in Sources */,
+				AA000032 /* SharedKeyboardState.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		33000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA000050 /* KeyboardViewController.swift in Sources */,
+				AA000040 /* AppGroupConfig.swift in Sources */,
+				AA000041 /* SharedDefaults.swift in Sources */,
+				AA000042 /* SharedKeyboardState.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		CC000002 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD000001 /* StopTypingKeyboard */;
+			targetProxy = CC000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		44000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = BP4WA38WQZ;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		44000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = BP4WA38WQZ;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = s;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		44000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = StopTyping/StopTyping.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = StopTyping/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Stop Typing";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stormacq.StopTypingiOS;
+				PRODUCT_NAME = StopTyping;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		44000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = StopTyping/StopTyping.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = StopTyping/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Stop Typing";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stormacq.StopTypingiOS;
+				PRODUCT_NAME = StopTyping;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		44000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = StopTypingKeyboard/StopTypingKeyboard.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = StopTypingKeyboard/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Stop Typing";
+				INFOPLIST_KEY_NSExtension = "$(inherited)";
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stormacq.StopTypingiOS.keyboard;
+				PRODUCT_NAME = StopTypingKeyboard;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		44000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = StopTypingKeyboard/StopTypingKeyboard.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = StopTypingKeyboard/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Stop Typing";
+				INFOPLIST_KEY_NSExtension = "$(inherited)";
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stormacq.StopTypingiOS.keyboard;
+				PRODUCT_NAME = StopTypingKeyboard;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		22000001 /* Build configuration list for PBXNativeTarget "StopTyping" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				44000003 /* Debug */,
+				44000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		22000002 /* Build configuration list for PBXNativeTarget "StopTypingKeyboard" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				44000005 /* Debug */,
+				44000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		22000003 /* Build configuration list for PBXProject "StopTyping" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				44000001 /* Debug */,
+				44000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = EE000001 /* Project object */;
+}
