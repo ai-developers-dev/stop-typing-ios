@@ -23,8 +23,10 @@
 		AA000014 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000014 /* HomeView.swift */; };
 		AA000015 /* HomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000015 /* HomeViewModel.swift */; };
 		AA000016 /* RecordingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000016 /* RecordingView.swift */; };
+		AA000025 /* DictationOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000025 /* DictationOverlayView.swift */; };
 		AA000017 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000017 /* HistoryView.swift */; };
 		AA000018 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000018 /* SettingsView.swift */; };
+		AA000027 /* DebugLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000027 /* DebugLogView.swift */; };
 		AA000019 /* KeyboardSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000019 /* KeyboardSetupView.swift */; };
 		AA000020 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000020 /* OnboardingView.swift */; };
 		AA000024 /* OnboardingComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000024 /* OnboardingComponents.swift */; };
@@ -32,9 +34,12 @@
 		AA000022 /* TranscriptCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000022 /* TranscriptCard.swift */; };
 		AA000023 /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000023 /* EmptyStateView.swift */; };
 		AA000030 /* AppGroupConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000030 /* AppGroupConfig.swift */; };
+		AA000033 /* DarwinNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000033 /* DarwinNotifications.swift */; };
+		AA000026 /* BackgroundDictationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000026 /* BackgroundDictationService.swift */; };
 		AA000031 /* SharedDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000031 /* SharedDefaults.swift */; };
 		AA000032 /* SharedKeyboardState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000032 /* SharedKeyboardState.swift */; };
 		AA000040 /* AppGroupConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000030 /* AppGroupConfig.swift */; };
+		AA000043 /* DarwinNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000033 /* DarwinNotifications.swift */; };
 		AA000041 /* SharedDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000031 /* SharedDefaults.swift */; };
 		AA000042 /* SharedKeyboardState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000032 /* SharedKeyboardState.swift */; };
 		AA000050 /* KeyboardViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000050 /* KeyboardViewController.swift */; };
@@ -83,8 +88,10 @@
 		BB000014 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		BB000015 /* HomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeViewModel.swift; sourceTree = "<group>"; };
 		BB000016 /* RecordingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingView.swift; sourceTree = "<group>"; };
+		BB000025 /* DictationOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationOverlayView.swift; sourceTree = "<group>"; };
 		BB000017 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
 		BB000018 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		BB000027 /* DebugLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogView.swift; sourceTree = "<group>"; };
 		BB000019 /* KeyboardSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardSetupView.swift; sourceTree = "<group>"; };
 		BB000020 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		BB000024 /* OnboardingComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingComponents.swift; sourceTree = "<group>"; };
@@ -92,6 +99,8 @@
 		BB000022 /* TranscriptCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptCard.swift; sourceTree = "<group>"; };
 		BB000023 /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
 		BB000030 /* AppGroupConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppGroupConfig.swift; sourceTree = "<group>"; };
+		BB000033 /* DarwinNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DarwinNotifications.swift; sourceTree = "<group>"; };
+		BB000026 /* BackgroundDictationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundDictationService.swift; sourceTree = "<group>"; };
 		BB000031 /* SharedDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedDefaults.swift; sourceTree = "<group>"; };
 		BB000032 /* SharedKeyboardState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedKeyboardState.swift; sourceTree = "<group>"; };
 		BB000050 /* KeyboardViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardViewController.swift; sourceTree = "<group>"; };
@@ -167,6 +176,7 @@
 			children = (
 				BB000006 /* PermissionsManager.swift */,
 				BB000013 /* SharedStateManager.swift */,
+				BB000026 /* BackgroundDictationService.swift */,
 				GG000006 /* Transcription */,
 				GG000007 /* Rewrite */,
 			);
@@ -228,6 +238,7 @@
 			isa = PBXGroup;
 			children = (
 				BB000016 /* RecordingView.swift */,
+				BB000025 /* DictationOverlayView.swift */,
 			);
 			path = Recording;
 			sourceTree = "<group>";
@@ -254,6 +265,7 @@
 			isa = PBXGroup;
 			children = (
 				BB000018 /* SettingsView.swift */,
+				BB000027 /* DebugLogView.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -288,6 +300,7 @@
 			isa = PBXGroup;
 			children = (
 				BB000030 /* AppGroupConfig.swift */,
+				BB000033 /* DarwinNotifications.swift */,
 				BB000031 /* SharedDefaults.swift */,
 				BB000032 /* SharedKeyboardState.swift */,
 			);
@@ -395,11 +408,15 @@
 				AA000011 /* LocalRewriteService.swift in Sources */,
 				AA000012 /* RemoteRewriteService.swift in Sources */,
 				AA000013 /* SharedStateManager.swift in Sources */,
+				AA000026 /* BackgroundDictationService.swift in Sources */,
+				AA000033 /* DarwinNotifications.swift in Sources */,
 				AA000014 /* HomeView.swift in Sources */,
 				AA000015 /* HomeViewModel.swift in Sources */,
 				AA000016 /* RecordingView.swift in Sources */,
+				AA000025 /* DictationOverlayView.swift in Sources */,
 				AA000017 /* HistoryView.swift in Sources */,
 				AA000018 /* SettingsView.swift in Sources */,
+				AA000027 /* DebugLogView.swift in Sources */,
 				AA000019 /* KeyboardSetupView.swift in Sources */,
 				AA000020 /* OnboardingView.swift in Sources */,
 				AA000024 /* OnboardingComponents.swift in Sources */,
@@ -418,6 +435,7 @@
 			files = (
 				AA000050 /* KeyboardViewController.swift in Sources */,
 				AA000051 /* KeyboardRootView.swift in Sources */,
+				AA000043 /* DarwinNotifications.swift in Sources */,
 				AA000040 /* AppGroupConfig.swift in Sources */,
 				AA000041 /* SharedDefaults.swift in Sources */,
 				AA000042 /* SharedKeyboardState.swift in Sources */,

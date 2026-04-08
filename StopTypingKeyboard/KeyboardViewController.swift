@@ -1,13 +1,19 @@
 import UIKit
 import SwiftUI
+import Combine
 
 class KeyboardViewController: UIInputViewController {
 
     private var hostingController: UIHostingController<KeyboardRootView>?
+    private var isAppAlive = false
+    private var isRecording = false
+    private var heartbeatTimer: Timer?
+    private let darwin = DarwinNotificationCenter.shared
+    private var lastInsertedTranscriptTimestamp: Date?
+    private var darwinObserversRegistered = false
 
     override init(nibName nibNameOrNil: String?, bundle nibBundleOrNil: Bundle?) {
         super.init(nibName: nibNameOrNil, bundle: nibBundleOrNil)
-        // Tell iOS we provide our own dictation — hides the system mic button
         hasDictationKey = true
     }
 
@@ -16,9 +22,49 @@ class KeyboardViewController: UIInputViewController {
         hasDictationKey = true
     }
 
+    private func klog(_ msg: String) {
+        SharedDefaults.shared.appendLog("KBD: \(msg)")
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         hasDictationKey = true
+        klog("viewDidLoad")
+
+        isAppAlive = SharedDefaults.shared.isAppAlive()
+        isRecording = SharedDefaults.shared.isRecording
+        klog("Initial state: appAlive=\(isAppAlive), recording=\(isRecording)")
+
+        setupKeyboardView()
+        registerDarwinObservers()
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        hasDictationKey = true
+        klog("viewWillAppear")
+        refreshState()
+        startHeartbeatPolling()
+        registerDarwinObservers()
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        heartbeatTimer?.invalidate()
+        heartbeatTimer = nil
+    }
+
+    // MARK: - Setup
+
+    private func setupKeyboardView() {
+        let appAliveBinding = Binding<Bool>(
+            get: { [weak self] in self?.isAppAlive ?? false },
+            set: { [weak self] in self?.isAppAlive = $0 }
+        )
+        let recordingBinding = Binding<Bool>(
+            get: { [weak self] in self?.isRecording ?? false },
+            set: { [weak self] in self?.isRecording = $0 }
+        )
 
         let keyboardView = KeyboardRootView(
             onInsertText: { [weak self] text in
@@ -33,7 +79,18 @@ class KeyboardViewController: UIInputViewController {
             onReturnKey: { [weak self] in
                 self?.textDocumentProxy.insertText("\n")
             },
-            showGlobe: needsInputModeSwitchKey
+            onOpenApp: { [weak self] in
+                self?.openMainApp()
+            },
+            onStartDictation: { [weak self] in
+                self?.startDictation()
+            },
+            onStopDictation: { [weak self] in
+                self?.stopDictation()
+            },
+            showGlobe: needsInputModeSwitchKey,
+            isAppAlive: appAliveBinding,
+            isRecording: recordingBinding
         )
 
         let host = UIHostingController(rootView: keyboardView)
@@ -54,9 +111,139 @@ class KeyboardViewController: UIInputViewController {
         hostingController = host
     }
 
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
-        hasDictationKey = true
+    // MARK: - Darwin Observers
+
+    private func registerDarwinObservers() {
+        // Only register once to prevent duplicate callbacks
+        guard !darwinObserversRegistered else { return }
+        darwinObserversRegistered = true
+
+        darwin.observe(DarwinNotificationName.transcriptReady) { [weak self] in
+            self?.onTranscriptReady()
+        }
+        klog("Darwin observers registered")
+    }
+
+    // MARK: - State Management
+
+    private func refreshState() {
+        let wasAlive = isAppAlive
+        isAppAlive = SharedDefaults.shared.isAppAlive()
+        isRecording = SharedDefaults.shared.isRecording
+        if isAppAlive != wasAlive {
+            klog("App alive changed: \(isAppAlive)")
+            rebuildView()
+        }
+    }
+
+    private func startHeartbeatPolling() {
+        heartbeatTimer?.invalidate()
+        heartbeatTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+            self?.refreshState()
+        }
+    }
+
+    private func rebuildView() {
+        guard let host = hostingController else { return }
+
+        let appAliveBinding = Binding<Bool>(
+            get: { [weak self] in self?.isAppAlive ?? false },
+            set: { [weak self] in self?.isAppAlive = $0 }
+        )
+        let recordingBinding = Binding<Bool>(
+            get: { [weak self] in self?.isRecording ?? false },
+            set: { [weak self] in self?.isRecording = $0 }
+        )
+
+        host.rootView = KeyboardRootView(
+            onInsertText: { [weak self] text in
+                self?.textDocumentProxy.insertText(text)
+            },
+            onDeleteBackward: { [weak self] in
+                self?.textDocumentProxy.deleteBackward()
+            },
+            onNextKeyboard: { [weak self] in
+                self?.advanceToNextInputMode()
+            },
+            onReturnKey: { [weak self] in
+                self?.textDocumentProxy.insertText("\n")
+            },
+            onOpenApp: { [weak self] in
+                self?.openMainApp()
+            },
+            onStartDictation: { [weak self] in
+                self?.startDictation()
+            },
+            onStopDictation: { [weak self] in
+                self?.stopDictation()
+            },
+            showGlobe: needsInputModeSwitchKey,
+            isAppAlive: appAliveBinding,
+            isRecording: recordingBinding
+        )
+    }
+
+    // MARK: - Actions
+
+    private func openMainApp() {
+        klog("Opening main app")
+        guard let url = URL(string: "stoptyping://activate") else { return }
+
+        var responder: UIResponder? = self
+        while let r = responder {
+            if let app = r as? UIApplication {
+                app.open(url)
+                klog("Opened via UIApplication")
+                return
+            }
+            responder = r.next
+        }
+
+        klog("Trying extensionContext.open")
+        extensionContext?.open(url) { success in
+            SharedDefaults.shared.appendLog("KBD: extensionContext result: \(success)")
+        }
+    }
+
+    private func startDictation() {
+        klog("START dictation")
+        isRecording = true
+        rebuildView()
+        darwin.post(DarwinNotificationName.startDictation)
+    }
+
+    private func stopDictation() {
+        klog("STOP dictation")
+        darwin.post(DarwinNotificationName.stopDictation)
+        // Don't set isRecording=false yet — wait for transcriptReady
+    }
+
+    private func onTranscriptReady() {
+        klog("transcriptReady received!")
+
+        // Guard against duplicate insertions
+        let defaults = SharedDefaults.shared
+        guard let timestamp = defaults.transcriptTimestamp else {
+            klog("No transcript timestamp found")
+            return
+        }
+
+        if let lastInserted = lastInsertedTranscriptTimestamp, timestamp <= lastInserted {
+            klog("Already inserted this transcript, skipping")
+            return
+        }
+
+        guard let transcript = defaults.latestTranscript, !transcript.isEmpty else {
+            klog("Transcript is empty")
+            return
+        }
+
+        klog("Inserting: \(transcript.prefix(80))...")
+        textDocumentProxy.insertText(transcript)
+        lastInsertedTranscriptTimestamp = timestamp
+
+        isRecording = false
+        rebuildView()
     }
 
     override func textWillChange(_ textInput: UITextInput?) {}

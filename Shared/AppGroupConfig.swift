@@ -7,4 +7,9 @@ enum AppGroupConfig {
     static let transcriptTimestampKey = "transcriptTimestamp"
     static let recentRewriteModeKey = "recentRewriteMode"
     static let userPreferencesKey = "userPreferences"
+
+    // Session / heartbeat keys
+    static let heartbeatKey = "sessionHeartbeat"
+    static let isRecordingKey = "isRecording"
+    static let sessionActiveKey = "sessionActive"
 }

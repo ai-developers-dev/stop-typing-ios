@@ -102,6 +102,41 @@ struct SettingsView: View {
                 } header: {
                     Text("Data")
                 }
+
+                // MARK: - Debug
+                Section {
+                    NavigationLink("View Debug Log") {
+                        DebugLogView()
+                    }
+
+                    Button("Clear Debug Log") {
+                        SharedDefaults.shared.clearDebugLog()
+                    }
+
+                    HStack {
+                        Text("Session Active")
+                        Spacer()
+                        Text(SharedDefaults.shared.sessionActive ? "YES" : "NO")
+                            .foregroundStyle(SharedDefaults.shared.sessionActive ? .green : .red)
+                    }
+
+                    HStack {
+                        Text("App Alive")
+                        Spacer()
+                        Text(SharedDefaults.shared.isAppAlive() ? "YES" : "NO")
+                            .foregroundStyle(SharedDefaults.shared.isAppAlive() ? .green : .red)
+                    }
+
+                    HStack {
+                        Text("Heartbeat")
+                        Spacer()
+                        Text(SharedDefaults.shared.heartbeat?.description ?? "nil")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("Debug")
+                }
             }
             .navigationTitle("Settings")
         }
