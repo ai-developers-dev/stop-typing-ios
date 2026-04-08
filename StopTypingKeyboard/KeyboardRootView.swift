@@ -69,7 +69,7 @@ struct KeyboardRootView: View {
         }
     }
 
-    // State A: App not running — show "Start Flow"
+    // State A: App not running — show "Start ST"
     private var inactiveToolbar: some View {
         HStack(spacing: 8) {
             // Insert latest transcript
@@ -87,11 +87,11 @@ struct KeyboardRootView: View {
 
             Spacer()
 
-            // Start Flow button
+            // Start ST button
             Button {
                 onOpenApp()
             } label: {
-                Text("Start Flow")
+                Text("Start ST")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 20)

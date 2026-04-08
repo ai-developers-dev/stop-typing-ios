@@ -59,7 +59,7 @@ struct HomeView: View {
     private var actionSection: some View {
         switch viewModel.transcriptionState {
         case .idle:
-            PrimaryButton("Start Flow", icon: "mic.fill") {
+            PrimaryButton("Start ST", icon: "mic.fill") {
                 Task { await viewModel.startFlow() }
             }
 

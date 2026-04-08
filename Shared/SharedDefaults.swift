@@ -47,28 +47,48 @@ final class SharedDefaults {
     // MARK: - Session Heartbeat
 
     var heartbeat: Date? {
-        get { defaults.object(forKey: AppGroupConfig.heartbeatKey) as? Date }
-        set { defaults.set(newValue, forKey: AppGroupConfig.heartbeatKey) }
+        get {
+            defaults.synchronize()
+            return defaults.object(forKey: AppGroupConfig.heartbeatKey) as? Date
+        }
+        set {
+            defaults.set(newValue, forKey: AppGroupConfig.heartbeatKey)
+            defaults.synchronize()
+        }
     }
 
     var isRecording: Bool {
-        get { defaults.bool(forKey: AppGroupConfig.isRecordingKey) }
-        set { defaults.set(newValue, forKey: AppGroupConfig.isRecordingKey) }
+        get {
+            defaults.synchronize()
+            return defaults.bool(forKey: AppGroupConfig.isRecordingKey)
+        }
+        set {
+            defaults.set(newValue, forKey: AppGroupConfig.isRecordingKey)
+            defaults.synchronize()
+        }
     }
 
     var sessionActive: Bool {
-        get { defaults.bool(forKey: AppGroupConfig.sessionActiveKey) }
-        set { defaults.set(newValue, forKey: AppGroupConfig.sessionActiveKey) }
+        get {
+            defaults.synchronize()
+            return defaults.bool(forKey: AppGroupConfig.sessionActiveKey)
+        }
+        set {
+            defaults.set(newValue, forKey: AppGroupConfig.sessionActiveKey)
+            defaults.synchronize()
+        }
     }
 
     /// Returns true if the main app heartbeat is recent (within 5 seconds).
     func isAppAlive() -> Bool {
-        guard let beat = heartbeat else { return false }
+        defaults.synchronize()
+        guard let beat = defaults.object(forKey: AppGroupConfig.heartbeatKey) as? Date else { return false }
         return Date().timeIntervalSince(beat) < 5.0
     }
 
     func writeHeartbeat() {
-        heartbeat = Date()
+        defaults.set(Date(), forKey: AppGroupConfig.heartbeatKey)
+        defaults.synchronize()
     }
 
     func clearSession() {
