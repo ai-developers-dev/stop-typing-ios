@@ -38,6 +38,7 @@
 		AA000041 /* SharedDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000031 /* SharedDefaults.swift */; };
 		AA000042 /* SharedKeyboardState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000032 /* SharedKeyboardState.swift */; };
 		AA000050 /* KeyboardViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000050 /* KeyboardViewController.swift */; };
+		AA000051 /* KeyboardRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000051 /* KeyboardRootView.swift */; };
 		AA000060 /* StopTypingKeyboard.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = DD000002 /* StopTypingKeyboard.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -94,6 +95,7 @@
 		BB000031 /* SharedDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedDefaults.swift; sourceTree = "<group>"; };
 		BB000032 /* SharedKeyboardState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedKeyboardState.swift; sourceTree = "<group>"; };
 		BB000050 /* KeyboardViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardViewController.swift; sourceTree = "<group>"; };
+		BB000051 /* KeyboardRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardRootView.swift; sourceTree = "<group>"; };
 		BB000070 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		BB000071 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		DD000002 /* StopTypingKeyboard.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = StopTypingKeyboard.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -268,6 +270,7 @@
 			isa = PBXGroup;
 			children = (
 				BB000050 /* KeyboardViewController.swift */,
+				BB000051 /* KeyboardRootView.swift */,
 				BB000071 /* Info.plist */,
 				GG000021 /* Components */,
 			);
@@ -414,6 +417,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA000050 /* KeyboardViewController.swift in Sources */,
+				AA000051 /* KeyboardRootView.swift in Sources */,
 				AA000040 /* AppGroupConfig.swift in Sources */,
 				AA000041 /* SharedDefaults.swift in Sources */,
 				AA000042 /* SharedKeyboardState.swift in Sources */,
