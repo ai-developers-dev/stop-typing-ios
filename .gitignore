@@ -25,6 +25,10 @@ fastlane/test_output
 *.mobileprovision
 *.p12
 
+# Secrets
+Secrets.plist
+StopTyping/Secrets.plist
+
 # Misc
 *.ipa
 *.dSYM.zip

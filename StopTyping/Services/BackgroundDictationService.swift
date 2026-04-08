@@ -235,19 +235,25 @@ final class BackgroundDictationService: ObservableObject {
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
             guard let self else { return }
-            let transcript = self.currentTranscript
-            self.log("Final: '\(transcript.prefix(80))'")
+            let rawTranscript = self.currentTranscript
+            self.log("Raw ASR: '\(rawTranscript.prefix(80))'")
 
             self.cleanupRecording()
 
-            if !transcript.isEmpty {
-                self.lastTranscript = transcript
-                self.defaults.saveTranscript(transcript)
-                DispatchQueue.main.async {
-                    TranscriptHistoryStore.shared.add(TranscriptItem(text: transcript))
+            if !rawTranscript.isEmpty {
+                // Send to Groq LLM for cleanup (async, with fallback to raw)
+                Task {
+                    let cleanedTranscript = await GroqService.shared.cleanTranscript(rawTranscript)
+                    self.log("LLM cleaned: '\(cleanedTranscript.prefix(80))'")
+
+                    await MainActor.run {
+                        self.lastTranscript = cleanedTranscript
+                        self.defaults.saveTranscript(cleanedTranscript)
+                        TranscriptHistoryStore.shared.add(TranscriptItem(text: cleanedTranscript))
+                        self.darwin.post(DarwinNotificationName.transcriptReady)
+                        self.log("Cleaned transcript saved, notified keyboard")
+                    }
                 }
-                self.darwin.post(DarwinNotificationName.transcriptReady)
-                self.log("Transcript saved, notified keyboard")
             } else {
                 self.log("Empty transcript")
             }

@@ -36,6 +36,7 @@
 		AA000030 /* AppGroupConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000030 /* AppGroupConfig.swift */; };
 		AA000033 /* DarwinNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000033 /* DarwinNotifications.swift */; };
 		AA000026 /* BackgroundDictationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000026 /* BackgroundDictationService.swift */; };
+		AA000028 /* GroqService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000028 /* GroqService.swift */; };
 		AA000031 /* SharedDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000031 /* SharedDefaults.swift */; };
 		AA000032 /* SharedKeyboardState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000032 /* SharedKeyboardState.swift */; };
 		AA000040 /* AppGroupConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000030 /* AppGroupConfig.swift */; };
@@ -101,6 +102,7 @@
 		BB000030 /* AppGroupConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppGroupConfig.swift; sourceTree = "<group>"; };
 		BB000033 /* DarwinNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DarwinNotifications.swift; sourceTree = "<group>"; };
 		BB000026 /* BackgroundDictationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundDictationService.swift; sourceTree = "<group>"; };
+		BB000028 /* GroqService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroqService.swift; sourceTree = "<group>"; };
 		BB000031 /* SharedDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedDefaults.swift; sourceTree = "<group>"; };
 		BB000032 /* SharedKeyboardState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedKeyboardState.swift; sourceTree = "<group>"; };
 		BB000050 /* KeyboardViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardViewController.swift; sourceTree = "<group>"; };
@@ -177,6 +179,7 @@
 				BB000006 /* PermissionsManager.swift */,
 				BB000013 /* SharedStateManager.swift */,
 				BB000026 /* BackgroundDictationService.swift */,
+				BB000028 /* GroqService.swift */,
 				GG000006 /* Transcription */,
 				GG000007 /* Rewrite */,
 			);
@@ -409,6 +412,7 @@
 				AA000012 /* RemoteRewriteService.swift in Sources */,
 				AA000013 /* SharedStateManager.swift in Sources */,
 				AA000026 /* BackgroundDictationService.swift in Sources */,
+				AA000028 /* GroqService.swift in Sources */,
 				AA000033 /* DarwinNotifications.swift in Sources */,
 				AA000014 /* HomeView.swift in Sources */,
 				AA000015 /* HomeViewModel.swift in Sources */,
