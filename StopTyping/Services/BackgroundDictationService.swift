@@ -2,6 +2,7 @@ import AVFoundation
 import Speech
 import UIKit
 import Foundation
+import Accelerate
 
 final class BackgroundDictationService: ObservableObject {
     static let shared = BackgroundDictationService()
@@ -19,7 +20,7 @@ final class BackgroundDictationService: ObservableObject {
     private var currentTranscript = ""
     private let defaults = SharedDefaults.shared
     private let darwin = DarwinNotificationCenter.shared
-    private var audioLevelUpdateCounter = 0
+    private var previousAudioLevel: Float = 0
 
     private init() {}
 
@@ -154,7 +155,7 @@ final class BackgroundDictationService: ObservableObject {
         currentTranscript = ""
         defaults.isRecording = true
         defaults.audioLevel = 0
-        audioLevelUpdateCounter = 0
+        previousAudioLevel = 0
         DispatchQueue.main.async { self.isCurrentlyRecording = true }
 
         // Stop idle engine
@@ -202,22 +203,20 @@ final class BackgroundDictationService: ObservableObject {
     // MARK: - Audio Level Metering
 
     private func updateAudioLevel(buffer: AVAudioPCMBuffer) {
-        audioLevelUpdateCounter += 1
-        // Only update every 5th buffer (~200ms at 1024 samples/44100Hz)
-        guard audioLevelUpdateCounter % 5 == 0 else { return }
-
         guard let channelData = buffer.floatChannelData?[0] else { return }
-        let frameLength = Int(buffer.frameLength)
+        let frameLength = vDSP_Length(buffer.frameLength)
         guard frameLength > 0 else { return }
 
-        var sum: Float = 0
-        for i in 0..<frameLength {
-            let sample = channelData[i]
-            sum += sample * sample
-        }
-        let rms = sqrt(sum / Float(frameLength))
-        // Normalize: rms of speech is typically 0.01-0.3, scale to 0-1
-        let level = min(1.0, rms * 5.0)
+        // Hardware-accelerated RMS calculation
+        var rms: Float = 0
+        vDSP_rmsqv(channelData, 1, &rms, frameLength)
+
+        // Exponential moving average smoothing — prevents jitter
+        let alpha: Float = 0.3
+        let smoothed = alpha * rms + (1 - alpha) * previousAudioLevel
+        previousAudioLevel = smoothed
+
+        let level = min(1.0, smoothed * 5.0)
         defaults.audioLevel = level
     }
 
@@ -233,6 +232,10 @@ final class BackgroundDictationService: ObservableObject {
         stopEngine()
         recognitionRequest?.endAudio()
 
+        // Reset audio level immediately — don't let keyboard see stale values
+        defaults.audioLevel = 0
+        previousAudioLevel = 0
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             guard let self else { return }
             let rawTranscript = self.currentTranscript
@@ -241,7 +244,6 @@ final class BackgroundDictationService: ObservableObject {
             self.cleanupRecording()
 
             if !rawTranscript.isEmpty {
-                // Send to Groq LLM for cleanup (async, with fallback to raw)
                 Task {
                     let cleanedTranscript = await GroqService.shared.cleanTranscript(rawTranscript)
                     self.log("LLM cleaned: '\(cleanedTranscript.prefix(80))'")
@@ -258,7 +260,6 @@ final class BackgroundDictationService: ObservableObject {
                 self.log("Empty transcript")
             }
 
-            self.defaults.audioLevel = 0
             self.startIdleAudioEngine()
         }
     }
@@ -272,6 +273,7 @@ final class BackgroundDictationService: ObservableObject {
         stopEngine()
         cleanupRecording()
         defaults.audioLevel = 0
+        previousAudioLevel = 0
 
         // Restart idle engine immediately — no delay
         startIdleAudioEngine()

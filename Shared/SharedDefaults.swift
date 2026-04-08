@@ -91,16 +91,11 @@ final class SharedDefaults {
         defaults.synchronize()
     }
 
-    /// Audio level (0.0 to 1.0) written by the app, read by the keyboard for waveform visualization.
+    /// Audio level (0.0 to 1.0) written by the app ~10x/sec, read by the keyboard for waveform.
+    /// No synchronize() — OS syncs fast enough at this rate, reduces disk I/O.
     var audioLevel: Float {
-        get {
-            defaults.synchronize()
-            return defaults.float(forKey: AppGroupConfig.audioLevelKey)
-        }
-        set {
-            defaults.set(newValue, forKey: AppGroupConfig.audioLevelKey)
-            defaults.synchronize()
-        }
+        get { defaults.float(forKey: AppGroupConfig.audioLevelKey) }
+        set { defaults.set(newValue, forKey: AppGroupConfig.audioLevelKey) }
     }
 
     func clearSession() {
