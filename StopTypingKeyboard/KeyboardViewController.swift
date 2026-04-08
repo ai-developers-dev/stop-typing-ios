@@ -29,7 +29,10 @@ class KeyboardViewController: UIInputViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         hasDictationKey = true
-        klog("viewDidLoad")
+
+        // Set background immediately to minimize flash during keyboard switch
+        view.backgroundColor = UIColor.systemGray6
+        inputView?.backgroundColor = UIColor.systemGray6
 
         isAppAlive = SharedDefaults.shared.isAppAlive()
         isRecording = SharedDefaults.shared.isRecording

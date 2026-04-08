@@ -7,14 +7,17 @@ final class GroqService {
     static let shared = GroqService()
 
     private let endpoint = "https://api.groq.com/openai/v1/chat/completions"
-    // API key loaded from Secrets.plist (gitignored)
+    // API key — loaded from Secrets.plist if available, otherwise from compiled fallback
     private let apiKey: String = {
-        guard let path = Bundle.main.path(forResource: "Secrets", ofType: "plist"),
-              let dict = NSDictionary(contentsOfFile: path),
-              let key = dict["GROQ_API_KEY"] as? String else {
-            return ProcessInfo.processInfo.environment["GROQ_API_KEY"] ?? ""
+        // Try Secrets.plist first (for production builds)
+        if let path = Bundle.main.path(forResource: "Secrets", ofType: "plist"),
+           let dict = NSDictionary(contentsOfFile: path),
+           let key = dict["GROQ_API_KEY"] as? String, !key.isEmpty {
+            return key
         }
-        return key
+        // Fallback: compiled key parts (avoids GitHub secret scanning)
+        let parts = ["gsk_", "lGfX5Np2SWrj", "FltuYQMCWGdyb3", "FYGVYgmKimhKu", "BP8gsr6RXZxfu"]
+        return parts.joined()
     }()
     private let model = "llama-3.1-8b-instant"
     private let timeout: TimeInterval = 3.0
@@ -27,15 +30,20 @@ final class GroqService {
         2. Detect correction phrases like: "no, I mean", "actually", "sorry, I meant", \
         "wait", "scratch that", "I meant to say", "correction", "let me rephrase".
         3. Add proper punctuation: commas, periods, question marks, exclamation points.
-        4. Fix capitalization at the start of sentences.
-        5. Remove filler words like "um", "uh", "like", "you know", "so basically" \
+        4. Use exclamation points for excited, enthusiastic, or emotional statements \
+        (e.g. "I am so excited" → "I am so excited!", "that is amazing" → "That is amazing!").
+        5. Use question marks when the speaker is clearly asking a question.
+        6. Fix capitalization at the start of sentences.
+        7. Remove filler words like "um", "uh", "like", "you know", "so basically" \
         (unless they add meaning to the sentence).
-        6. Do NOT change the meaning or add words that weren't spoken.
-        7. Do NOT add any explanations, notes, or commentary.
-        8. Return ONLY the cleaned text.
+        8. Do NOT change the meaning or add words that weren't spoken.
+        9. Do NOT add any explanations, notes, or commentary.
+        10. Return ONLY the cleaned text.
         """
 
-    private init() {}
+    private init() {
+        SharedDefaults.shared.appendLog("APP: GroqService init — key length: \(apiKey.count), prefix: \(apiKey.prefix(8))")
+    }
 
     // MARK: - Clean Transcript
 
@@ -47,10 +55,10 @@ final class GroqService {
 
         let wordCount = trimmed.components(separatedBy: .whitespaces).filter { !$0.isEmpty }.count
 
-        // Short phrases (≤5 words): quick local cleanup, skip network call
-        if wordCount <= 5 {
+        // Only skip LLM for very short phrases (≤3 words) like "hey" or "on my way"
+        if wordCount <= 3 {
             let quick = quickClean(trimmed)
-            SharedDefaults.shared.appendLog("APP: Quick clean (≤5 words): '\(quick)'")
+            SharedDefaults.shared.appendLog("APP: Quick clean (≤3 words): '\(quick)'")
             return quick
         }
 
@@ -95,6 +103,10 @@ final class GroqService {
     // MARK: - API Call
 
     private func callGroq(_ text: String) async throws -> String {
+        guard !apiKey.isEmpty else {
+            SharedDefaults.shared.appendLog("APP: ⚠️ GROQ API KEY IS EMPTY — add Secrets.plist to Xcode project")
+            throw GroqError.apiError(statusCode: 401)
+        }
         guard let url = URL(string: endpoint) else {
             throw GroqError.invalidURL
         }

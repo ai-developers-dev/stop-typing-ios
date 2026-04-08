@@ -175,8 +175,16 @@ final class BackgroundDictationService: ObservableObject {
         }
 
         recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
-            if let result { self?.currentTranscript = result.bestTranscription.formattedString }
-            if let error { self?.log("Recognition error: \(error.localizedDescription)") }
+            guard let self else { return }
+            if let result {
+                self.currentTranscript = result.bestTranscription.formattedString
+                if result.isFinal {
+                    self.log("ASR final result: '\(self.currentTranscript.prefix(60))'")
+                }
+            }
+            if let error {
+                self.log("Recognition error: \(error.localizedDescription)")
+            }
         }
 
         let inputNode = engine.inputNode
@@ -184,7 +192,6 @@ final class BackgroundDictationService: ObservableObject {
 
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
             self?.recognitionRequest?.append(buffer)
-            // Compute audio level and write to App Group every ~5th callback (~200ms)
             self?.updateAudioLevel(buffer: buffer)
         }
 
@@ -232,11 +239,10 @@ final class BackgroundDictationService: ObservableObject {
         stopEngine()
         recognitionRequest?.endAudio()
 
-        // Reset audio level immediately — don't let keyboard see stale values
         defaults.audioLevel = 0
         previousAudioLevel = 0
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             guard let self else { return }
             let rawTranscript = self.currentTranscript
             self.log("Raw ASR: '\(rawTranscript.prefix(80))'")
