@@ -22,7 +22,7 @@ final class BackgroundDictationService: ObservableObject {
     private let defaults = SharedDefaults.shared
     private let darwin = DarwinNotificationCenter.shared
     private var previousAudioLevel: Float = 0
-    private var currentActivity: Activity<StopTypingAttributes>?
+    private var currentActivity: Activity<StopTypingWidgetAttributes>?
 
     private init() {}
 
@@ -91,22 +91,22 @@ final class BackgroundDictationService: ObservableObject {
 
         log("Session ACTIVE")
 
-        // Start Live Activity for Dynamic Island
+        // Start Live Activity for Dynamic Island (non-blocking)
         startLiveActivity()
     }
 
     // MARK: - Live Activity
 
     private func startLiveActivity() {
-        guard ActivityAuthorizationInfo().areActivitiesEnabled else {
-            log("Live Activities not enabled")
-            return
-        }
-
-        let attrs = StopTypingAttributes(sessionId: UUID().uuidString)
-        let state = StopTypingAttributes.ContentState(isRecording: false, mode: "Formal")
-
         do {
+            guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+                log("Live Activities not enabled on this device")
+                return
+            }
+
+            let attrs = StopTypingWidgetAttributes(sessionId: UUID().uuidString)
+            let state = StopTypingWidgetAttributes.ContentState(isRecording: false, mode: "Formal")
+
             currentActivity = try Activity.request(
                 attributes: attrs,
                 content: .init(state: state, staleDate: nil),
@@ -114,23 +114,26 @@ final class BackgroundDictationService: ObservableObject {
             )
             log("Live Activity started")
         } catch {
-            log("Live Activity failed: \(error.localizedDescription)")
+            log("Live Activity skipped: \(error.localizedDescription)")
+            // Non-fatal — session works fine without Live Activity
         }
     }
 
     private func updateLiveActivity(isRecording: Bool) {
+        guard let activity = currentActivity else { return }
         Task {
-            let state = StopTypingAttributes.ContentState(isRecording: isRecording, mode: "Formal")
-            await currentActivity?.update(.init(state: state, staleDate: nil))
+            let state = StopTypingWidgetAttributes.ContentState(isRecording: isRecording, mode: "Formal")
+            await activity.update(.init(state: state, staleDate: nil))
         }
     }
 
     private func endLiveActivity() {
+        guard let activity = currentActivity else { return }
         Task {
-            await currentActivity?.end(nil, dismissalPolicy: .immediate)
-            currentActivity = nil
-            log("Live Activity ended")
+            await activity.end(nil, dismissalPolicy: .immediate)
         }
+        currentActivity = nil
+        log("Live Activity ended")
     }
 
     // MARK: - Idle Audio Engine
