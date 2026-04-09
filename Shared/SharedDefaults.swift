@@ -83,7 +83,7 @@ final class SharedDefaults {
     func isAppAlive() -> Bool {
         defaults.synchronize()
         guard let beat = defaults.object(forKey: AppGroupConfig.heartbeatKey) as? Date else { return false }
-        return Date().timeIntervalSince(beat) < 5.0
+        return Date().timeIntervalSince(beat) < 10.0
     }
 
     func writeHeartbeat() {

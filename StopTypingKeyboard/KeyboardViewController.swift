@@ -35,7 +35,8 @@ class KeyboardViewController: UIInputViewController {
         view.backgroundColor = .systemGray6
         inputView?.backgroundColor = .systemGray6
 
-        isAppAlive = SharedDefaults.shared.isAppAlive()
+        // Use sessionActive boolean for instant check — no timestamp staleness
+        isAppAlive = SharedDefaults.shared.sessionActive
         isRecording = SharedDefaults.shared.isRecording
 
         setupKeyboardView()
@@ -45,7 +46,9 @@ class KeyboardViewController: UIInputViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         hasDictationKey = true
+        // Immediate state check + UI rebuild — don't wait for timer
         refreshState()
+        rebuildView()
         startHeartbeatPolling()
         registerDarwinObservers()
     }

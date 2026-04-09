@@ -3,6 +3,7 @@ import Speech
 import UIKit
 import Foundation
 import Accelerate
+import ActivityKit
 
 final class BackgroundDictationService: ObservableObject {
     static let shared = BackgroundDictationService()
@@ -21,6 +22,7 @@ final class BackgroundDictationService: ObservableObject {
     private let defaults = SharedDefaults.shared
     private let darwin = DarwinNotificationCenter.shared
     private var previousAudioLevel: Float = 0
+    private var currentActivity: Activity<StopTypingAttributes>?
 
     private init() {}
 
@@ -88,6 +90,47 @@ final class BackgroundDictationService: ObservableObject {
         ) { [weak self] _ in self?.deactivateSession() }
 
         log("Session ACTIVE")
+
+        // Start Live Activity for Dynamic Island
+        startLiveActivity()
+    }
+
+    // MARK: - Live Activity
+
+    private func startLiveActivity() {
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+            log("Live Activities not enabled")
+            return
+        }
+
+        let attrs = StopTypingAttributes(sessionId: UUID().uuidString)
+        let state = StopTypingAttributes.ContentState(isRecording: false, mode: "Formal")
+
+        do {
+            currentActivity = try Activity.request(
+                attributes: attrs,
+                content: .init(state: state, staleDate: nil),
+                pushType: nil
+            )
+            log("Live Activity started")
+        } catch {
+            log("Live Activity failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func updateLiveActivity(isRecording: Bool) {
+        Task {
+            let state = StopTypingAttributes.ContentState(isRecording: isRecording, mode: "Formal")
+            await currentActivity?.update(.init(state: state, staleDate: nil))
+        }
+    }
+
+    private func endLiveActivity() {
+        Task {
+            await currentActivity?.end(nil, dismissalPolicy: .immediate)
+            currentActivity = nil
+            log("Live Activity ended")
+        }
     }
 
     // MARK: - Idle Audio Engine
@@ -121,6 +164,7 @@ final class BackgroundDictationService: ObservableObject {
 
     func deactivateSession() {
         log("Deactivating session")
+        endLiveActivity()
         cleanupRecording()
         if let engine = audioEngine, engine.isRunning {
             engine.inputNode.removeTap(onBus: 0)
@@ -199,6 +243,7 @@ final class BackgroundDictationService: ObservableObject {
         do {
             try engine.start()
             log("Recording engine STARTED")
+            updateLiveActivity(isRecording: true)
         } catch {
             log("Recording engine FAILED: \(error)")
             defaults.isRecording = false
@@ -260,6 +305,7 @@ final class BackgroundDictationService: ObservableObject {
                         TranscriptHistoryStore.shared.add(TranscriptItem(text: cleanedTranscript))
                         self.darwin.post(DarwinNotificationName.transcriptReady)
                         self.log("Cleaned transcript saved, notified keyboard")
+                        self.updateLiveActivity(isRecording: false)
                     }
                 }
             } else {
@@ -283,6 +329,7 @@ final class BackgroundDictationService: ObservableObject {
 
         // Restart idle engine immediately — no delay
         startIdleAudioEngine()
+        updateLiveActivity(isRecording: false)
         log("Cancel complete, idle engine restarted")
     }
 
