@@ -30,13 +30,8 @@ class KeyboardViewController: UIInputViewController {
         super.viewDidLoad()
         hasDictationKey = true
 
-        // Set background immediately to minimize flash during keyboard switch
-        view.backgroundColor = UIColor.systemGray6
-        inputView?.backgroundColor = UIColor.systemGray6
-
         isAppAlive = SharedDefaults.shared.isAppAlive()
         isRecording = SharedDefaults.shared.isRecording
-        klog("Initial state: appAlive=\(isAppAlive), recording=\(isRecording)")
 
         setupKeyboardView()
         registerDarwinObservers()
@@ -45,7 +40,6 @@ class KeyboardViewController: UIInputViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         hasDictationKey = true
-        klog("viewWillAppear")
         refreshState()
         startHeartbeatPolling()
         registerDarwinObservers()
@@ -120,14 +114,12 @@ class KeyboardViewController: UIInputViewController {
     // MARK: - Darwin Observers
 
     private func registerDarwinObservers() {
-        // Only register once to prevent duplicate callbacks
         guard !darwinObserversRegistered else { return }
         darwinObserversRegistered = true
 
         darwin.observe(DarwinNotificationName.transcriptReady) { [weak self] in
             self?.onTranscriptReady()
         }
-        klog("Darwin observers registered")
     }
 
     // MARK: - State Management
@@ -137,7 +129,6 @@ class KeyboardViewController: UIInputViewController {
         isAppAlive = SharedDefaults.shared.isAppAlive()
         isRecording = SharedDefaults.shared.isRecording
         if isAppAlive != wasAlive {
-            klog("App alive changed: \(isAppAlive)")
             rebuildView()
         }
     }
@@ -202,13 +193,11 @@ class KeyboardViewController: UIInputViewController {
         while let r = responder {
             if let app = r as? UIApplication {
                 app.open(url)
-                klog("Opened via UIApplication")
                 return
             }
             responder = r.next
         }
 
-        klog("Trying extensionContext.open")
         extensionContext?.open(url) { success in
             SharedDefaults.shared.appendLog("KBD: extensionContext result: \(success)")
         }
@@ -224,7 +213,6 @@ class KeyboardViewController: UIInputViewController {
     private func stopDictation() {
         klog("STOP dictation (save)")
         darwin.post(DarwinNotificationName.stopDictation)
-        // Don't set isRecording=false yet — wait for transcriptReady
     }
 
     private func cancelDictation() {
@@ -237,7 +225,6 @@ class KeyboardViewController: UIInputViewController {
     private func onTranscriptReady() {
         klog("transcriptReady received!")
 
-        // Guard against duplicate insertions
         let defaults = SharedDefaults.shared
         guard let timestamp = defaults.transcriptTimestamp else {
             klog("No transcript timestamp found")
