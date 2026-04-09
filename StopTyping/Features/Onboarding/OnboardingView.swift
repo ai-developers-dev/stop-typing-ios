@@ -165,7 +165,12 @@ struct OnboardingView: View {
             } else {
                 DarkCTAButton(title: "Enable Microphone") {
                     Task {
-                        await permissions.requestMicrophone()
+                        let mic = await permissions.requestMicrophone()
+                        if mic {
+                            // Also request speech recognition so user doesn't get
+                            // a second popup later on the dictation test screen
+                            await permissions.requestSpeechRecognition()
+                        }
                         if permissions.microphoneGranted {
                             goTo(3)
                         }

@@ -30,6 +30,11 @@ class KeyboardViewController: UIInputViewController {
         super.viewDidLoad()
         hasDictationKey = true
 
+        // Match the exact same color as our SwiftUI keyboard background
+        // This fills the area above our VStack so no different-shade gray shows
+        view.backgroundColor = .systemGray6
+        inputView?.backgroundColor = .systemGray6
+
         isAppAlive = SharedDefaults.shared.isAppAlive()
         isRecording = SharedDefaults.shared.isRecording
 
