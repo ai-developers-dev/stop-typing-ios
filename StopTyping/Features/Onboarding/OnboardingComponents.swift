@@ -2,8 +2,6 @@ import SwiftUI
 
 // MARK: - Progress Bar
 
-/// Segmented progress bar matching Wispr Flow style.
-/// Each segment fills dark when active, light gray when inactive.
 struct OnboardingProgressBar: View {
     let currentSegment: Int
     let totalSegments: Int
@@ -13,8 +11,8 @@ struct OnboardingProgressBar: View {
             ForEach(0..<totalSegments, id: \.self) { index in
                 RoundedRectangle(cornerRadius: 2)
                     .fill(index <= currentSegment
-                          ? AppTheme.progressActive
-                          : AppTheme.progressInactive)
+                          ? AppTheme.ctaDark
+                          : AppTheme.surfaceDim)
                     .frame(height: 4)
             }
         }
@@ -23,7 +21,6 @@ struct OnboardingProgressBar: View {
 
 // MARK: - Navigation Bar
 
-/// Top bar with back arrow, progress bar, and optional skip link.
 struct OnboardingNavBar: View {
     let showBack: Bool
     let onBack: () -> Void
@@ -38,7 +35,7 @@ struct OnboardingNavBar: View {
                 Button(action: onBack) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(AppTheme.onboardingPrimaryText)
+                        .foregroundStyle(AppTheme.onSurface)
                 }
                 .frame(width: 32)
             } else {
@@ -53,7 +50,7 @@ struct OnboardingNavBar: View {
             if showSkip, let onSkip {
                 Button("Skip", action: onSkip)
                     .font(AppTheme.onboardingSkipFont)
-                    .foregroundStyle(AppTheme.onboardingSecondaryText)
+                    .foregroundStyle(AppTheme.onSurfaceVariant)
                     .frame(width: 40)
             } else {
                 Spacer().frame(width: 40)
@@ -64,9 +61,8 @@ struct OnboardingNavBar: View {
     }
 }
 
-// MARK: - Dark CTA Button
+// MARK: - Dark CTA Button (Obsidian)
 
-/// Primary onboarding button — dark charcoal, white text, full width.
 struct DarkCTAButton: View {
     let title: String
     let action: () -> Void
@@ -84,9 +80,8 @@ struct DarkCTAButton: View {
     }
 }
 
-// MARK: - Soft CTA Button
+// MARK: - Soft CTA Button (Lavender)
 
-/// Secondary onboarding button — soft lavender, dark text, full width.
 struct SoftCTAButton: View {
     let title: String
     let action: () -> Void
@@ -106,7 +101,6 @@ struct SoftCTAButton: View {
 
 // MARK: - Onboarding Heading
 
-/// Serif heading with an optional highlighted word in accent orange.
 struct OnboardingHeading: View {
     let text: String
     var highlight: String? = nil
@@ -119,7 +113,7 @@ struct OnboardingHeading: View {
             (
                 Text(parts.first ?? "")
                     .font(size)
-                    .foregroundStyle(AppTheme.onboardingPrimaryText)
+                    .foregroundStyle(AppTheme.onSurface)
                 +
                 Text(highlight)
                     .font(size)
@@ -128,13 +122,13 @@ struct OnboardingHeading: View {
                 +
                 Text(parts.dropFirst().joined(separator: highlight))
                     .font(size)
-                    .foregroundStyle(AppTheme.onboardingPrimaryText)
+                    .foregroundStyle(AppTheme.onSurface)
             )
             .multilineTextAlignment(.center)
         } else {
             Text(text)
                 .font(size)
-                .foregroundStyle(AppTheme.onboardingPrimaryText)
+                .foregroundStyle(AppTheme.onSurface)
                 .multilineTextAlignment(.center)
         }
     }
@@ -142,7 +136,6 @@ struct OnboardingHeading: View {
 
 // MARK: - Benefit Row
 
-/// Icon + text row for value proposition lists.
 struct BenefitRow: View {
     let icon: String
     let text: String
@@ -150,26 +143,28 @@ struct BenefitRow: View {
     var body: some View {
         HStack(spacing: 16) {
             Image(systemName: icon)
-                .font(.system(size: 24))
+                .font(.system(size: 22))
                 .foregroundStyle(AppTheme.accentOrange)
-                .frame(width: 36)
+                .frame(width: 40, height: 40)
+                .background(AppTheme.surfaceContainerHigh)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
 
             Text(text)
                 .font(AppTheme.onboardingBody)
-                .foregroundStyle(AppTheme.onboardingPrimaryText)
+                .foregroundStyle(AppTheme.onSurface)
 
             Spacer()
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, 14)
         .padding(.horizontal, AppTheme.paddingMedium)
-        .background(AppTheme.onboardingCardBg)
+        .background(Color.white)
         .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadiusSmall))
+        .shadow(color: Color(hex: "#1B1B22").opacity(0.04), radius: 8, x: 0, y: 2)
     }
 }
 
 // MARK: - Settings Mock Row
 
-/// Fake iOS Settings row for the keyboard setup screen.
 struct SettingsMockRow: View {
     let icon: String
     let title: String
@@ -181,32 +176,30 @@ struct SettingsMockRow: View {
         HStack(spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 18))
-                .foregroundStyle(.gray)
+                .foregroundStyle(AppTheme.onSurfaceVariant)
                 .frame(width: 28, height: 28)
-                .background(AppTheme.settingsRowBg)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
 
             Text(title)
-                .font(.system(size: 17))
-                .foregroundStyle(AppTheme.onboardingPrimaryText)
+                .font(.system(size: 16))
+                .foregroundStyle(AppTheme.onSurface)
 
             Spacer()
 
             if hasChevron {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(AppTheme.settingsBorder)
+                    .foregroundStyle(AppTheme.surfaceDim)
             }
 
             if hasToggle {
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(toggleOn ? AppTheme.successGreen : AppTheme.settingsRowBg)
+                    .fill(toggleOn ? AppTheme.successGreen : AppTheme.surfaceContainerHigh)
                     .frame(width: 51, height: 31)
                     .overlay(
                         Circle()
                             .fill(.white)
                             .frame(width: 27, height: 27)
-                            .shadow(color: .black.opacity(0.15), radius: 2, x: 0, y: 1)
+                            .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
                             .offset(x: toggleOn ? 10 : -10),
                         alignment: .center
                     )
@@ -217,7 +210,6 @@ struct SettingsMockRow: View {
     }
 }
 
-/// Container that groups multiple SettingsMockRows with dividers.
 struct SettingsMockCard: View {
     let rows: [SettingsMockRow]
 
@@ -231,15 +223,14 @@ struct SettingsMockCard: View {
                 }
             }
         }
-        .background(AppTheme.onboardingCardBg)
-        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-        .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 4)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadiusSmall))
+        .shadow(color: Color(hex: "#1B1B22").opacity(0.04), radius: 8, x: 0, y: 2)
     }
 }
 
 // MARK: - Skip Link
 
-/// "Skip for now" or "Maybe later" style text button.
 struct SkipLink: View {
     let title: String
     let action: () -> Void
@@ -248,22 +239,12 @@ struct SkipLink: View {
         Button(action: action) {
             Text(title)
                 .font(AppTheme.onboardingSkipFont)
-                .foregroundStyle(AppTheme.onboardingSecondaryText)
+                .foregroundStyle(AppTheme.onSurfaceVariant)
         }
     }
 }
 
 // MARK: - Previews
-
-#Preview("Progress Bar") {
-    VStack(spacing: 20) {
-        OnboardingProgressBar(currentSegment: 0, totalSegments: 4)
-        OnboardingProgressBar(currentSegment: 1, totalSegments: 4)
-        OnboardingProgressBar(currentSegment: 2, totalSegments: 4)
-        OnboardingProgressBar(currentSegment: 3, totalSegments: 4)
-    }
-    .padding()
-}
 
 #Preview("Buttons") {
     VStack(spacing: 16) {
@@ -272,15 +253,15 @@ struct SkipLink: View {
         SkipLink(title: "Skip for now") {}
     }
     .padding()
-    .background(AppTheme.onboardingBackground)
+    .background(AppTheme.surface)
 }
 
-#Preview("Settings Mock") {
-    SettingsMockCard(rows: [
-        SettingsMockRow(icon: "keyboard", title: "Keyboards", hasChevron: true),
-        SettingsMockRow(icon: "keyboard", title: "Stop Typing", hasToggle: true, toggleOn: false),
-        SettingsMockRow(icon: "keyboard", title: "Allow Full Access", hasToggle: true, toggleOn: false),
-    ])
+#Preview("Benefit Rows") {
+    VStack(spacing: 12) {
+        BenefitRow(icon: "message.fill", text: "Dictate messages instantly")
+        BenefitRow(icon: "envelope.fill", text: "Write emails in seconds")
+        BenefitRow(icon: "note.text", text: "Capture ideas on the go")
+    }
     .padding()
-    .background(AppTheme.onboardingBackground)
+    .background(AppTheme.surface)
 }

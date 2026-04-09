@@ -15,17 +15,17 @@ struct OnboardingView: View {
 
     var body: some View {
         ZStack {
-            AppTheme.onboardingBackground.ignoresSafeArea()
+            AppTheme.surface.ignoresSafeArea()
 
             Group {
                 switch currentPage {
-                case 0: welcomeHeroPage       // Welcome
-                case 1: valuePropsPage        // Value props
-                case 2: microphonePage        // Mic permission
-                case 3: setupIntroPage        // "Let's set up"
-                case 4: keyboardSettingsPage  // Mock settings + Go to Settings
-                case 5: testDictationPage     // Real dictation test
-                case 6: useKeyboardPage       // How to switch to Stop Typing keyboard
+                case 0: welcomeHeroPage
+                case 1: valuePropsPage
+                case 2: microphonePage
+                case 3: setupIntroPage
+                case 4: keyboardSettingsPage
+                case 5: testDictationPage
+                case 6: useKeyboardPage
                 default: useKeyboardPage
                 }
             }
@@ -45,34 +45,46 @@ struct OnboardingView: View {
         withAnimation { currentPage = max(0, currentPage - 1) }
     }
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // MARK: - Screen 0: Welcome Hero
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private var welcomeHeroPage: some View {
         VStack(spacing: 0) {
             Spacer()
 
-            Image(systemName: "waveform.circle.fill")
-                .font(.system(size: 72))
-                .foregroundStyle(AppTheme.flowGradient)
-                .padding(.bottom, 24)
+            // Waveform logo in purple gradient circle
+            Image(systemName: "waveform")
+                .font(.system(size: 28, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 64, height: 64)
+                .background(
+                    LinearGradient(
+                        colors: [Color(hex: "#A78BFA"), Color(hex: "#7C3AED")],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .clipShape(Circle())
+                .padding(.bottom, 20)
 
-            Text("Stop Typing")
+            Text("Stop\nTyping")
                 .font(AppTheme.onboardingHeroHeading)
-                .foregroundStyle(AppTheme.onboardingPrimaryText)
+                .foregroundStyle(AppTheme.onSurface)
+                .multilineTextAlignment(.center)
                 .padding(.bottom, 12)
 
+            // "Your voice, 4x faster than typing"
             (
                 Text("Your voice, ")
-                    .foregroundStyle(AppTheme.onboardingPrimaryText)
+                    .foregroundStyle(AppTheme.onSurface)
                 +
                 Text("4x faster")
                     .foregroundStyle(AppTheme.accentOrange)
                     .italic()
                 +
-                Text("\nthan typing")
-                    .foregroundStyle(AppTheme.onboardingPrimaryText)
+                Text(" than typing")
+                    .foregroundStyle(AppTheme.onSurface)
             )
             .font(AppTheme.onboardingHeading)
             .multilineTextAlignment(.center)
@@ -87,9 +99,9 @@ struct OnboardingView: View {
         }
     }
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // MARK: - Screen 1: Value Props
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private var valuePropsPage: some View {
         VStack(spacing: 0) {
@@ -100,8 +112,12 @@ struct OnboardingView: View {
 
             Spacer()
 
-            OnboardingHeading(text: "Your voice works\neverywhere")
-                .padding(.bottom, 32)
+            OnboardingHeading(
+                text: "Your voice works\neverywhere",
+                highlight: "everywhere",
+                highlightColor: AppTheme.accentOrange
+            )
+            .padding(.bottom, 32)
 
             VStack(spacing: 12) {
                 BenefitRow(icon: "message.fill", text: "Dictate messages instantly")
@@ -120,9 +136,9 @@ struct OnboardingView: View {
         }
     }
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // MARK: - Screen 2: Microphone Permission
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private var microphonePage: some View {
         VStack(spacing: 0) {
@@ -133,9 +149,19 @@ struct OnboardingView: View {
 
             Spacer()
 
-            Image(systemName: "mic.circle.fill")
-                .font(.system(size: 72))
-                .foregroundStyle(AppTheme.flowGradient)
+            // Mic in purple gradient circle
+            Image(systemName: "mic.fill")
+                .font(.system(size: 32))
+                .foregroundStyle(.white)
+                .frame(width: 72, height: 72)
+                .background(
+                    LinearGradient(
+                        colors: [Color(hex: "#A78BFA"), Color(hex: "#7C3AED")],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .clipShape(Circle())
                 .padding(.bottom, 24)
 
             OnboardingHeading(text: "Enable your\nmicrophone")
@@ -143,7 +169,7 @@ struct OnboardingView: View {
 
             Text("Stop Typing needs microphone access\nto transcribe your voice.")
                 .font(AppTheme.onboardingSubhead)
-                .foregroundStyle(AppTheme.onboardingSecondaryText)
+                .foregroundStyle(AppTheme.onSurfaceVariant)
                 .multilineTextAlignment(.center)
 
             Spacer()
@@ -154,7 +180,7 @@ struct OnboardingView: View {
                         .foregroundStyle(AppTheme.successGreen)
                     Text("Microphone enabled")
                         .font(AppTheme.onboardingBody)
-                        .foregroundStyle(AppTheme.onboardingPrimaryText)
+                        .foregroundStyle(AppTheme.onSurface)
                 }
                 .padding(.bottom, 16)
 
@@ -167,8 +193,6 @@ struct OnboardingView: View {
                     Task {
                         let mic = await permissions.requestMicrophone()
                         if mic {
-                            // Also request speech recognition so user doesn't get
-                            // a second popup later on the dictation test screen
                             await permissions.requestSpeechRecognition()
                         }
                         if permissions.microphoneGranted {
@@ -186,9 +210,9 @@ struct OnboardingView: View {
         }
     }
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // MARK: - Screen 3: Setup Intro
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private var setupIntroPage: some View {
         VStack(spacing: 0) {
@@ -208,7 +232,7 @@ struct OnboardingView: View {
 
             Text("This only takes a moment")
                 .font(AppTheme.onboardingSubhead)
-                .foregroundStyle(AppTheme.onboardingSecondaryText)
+                .foregroundStyle(AppTheme.onSurfaceVariant)
 
             Spacer()
 
@@ -220,9 +244,9 @@ struct OnboardingView: View {
         }
     }
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // MARK: - Screen 4: Keyboard Settings (Mock UI)
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // MARK: - Screen 4: Keyboard Settings
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private var keyboardSettingsPage: some View {
         VStack(spacing: 0) {
@@ -243,37 +267,25 @@ struct OnboardingView: View {
                     ])
                     .padding(.horizontal, AppTheme.paddingLarge)
 
-                    (
-                        Text("We provide 100% privacy. We ")
-                            .font(AppTheme.onboardingPrivacyFont)
-                            .foregroundStyle(AppTheme.onboardingSecondaryText)
-                        +
-                        Text("never store or read")
-                            .font(AppTheme.onboardingPrivacyFont)
-                            .bold()
-                            .foregroundStyle(AppTheme.onboardingSecondaryText)
-                        +
-                        Text(" what you say. Full Keyboard Access just allows Stop Typing to work across your apps.")
-                            .font(AppTheme.onboardingPrivacyFont)
-                            .foregroundStyle(AppTheme.onboardingSecondaryText)
-                    )
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, AppTheme.paddingLarge)
+                    Text("We provide 100% privacy. We never store or read what you say. Full Keyboard Access just allows Stop Typing to work across your apps.")
+                        .font(AppTheme.onboardingPrivacyFont)
+                        .foregroundStyle(AppTheme.onSurfaceVariant)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, AppTheme.paddingLarge)
 
                     DarkCTAButton(title: "Go to Settings") {
                         PermissionsManager.openKeyboardSettings()
                     }
                     .padding(.horizontal, AppTheme.paddingLarge)
 
+                    // Instructions tooltip
                     VStack(alignment: .leading, spacing: 8) {
-                        Label("Click Keyboards", systemImage: "keyboard")
-                        Label("Turn on Stop Typing", systemImage: "togglepower")
-                        Label("Turn on Allow Full Access", systemImage: "checkmark.square")
-                        Label("Tap Allow on the popup", systemImage: "hand.tap")
-                        Label("Come back to this app", systemImage: "arrow.uturn.backward")
+                        instructionRow(icon: "keyboard", text: "Click Keyboards", color: .green)
+                        instructionRow(icon: "togglepower", text: "Turn on Stop Typing", color: .green)
+                        instructionRow(icon: "checkmark.square", text: "Turn on Allow Full Access", color: .green)
+                        instructionRow(icon: "hand.tap", text: "Tap Allow on the popup", color: .green)
+                        instructionRow(icon: "arrow.uturn.backward", text: "Come back to this app", color: .green)
                     }
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.white)
                     .padding(AppTheme.paddingMedium)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(AppTheme.ctaDark)
@@ -292,9 +304,21 @@ struct OnboardingView: View {
         }
     }
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    private func instructionRow(icon: String, text: String, color: Color) -> some View {
+        Label {
+            Text(text)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.white)
+        } icon: {
+            Image(systemName: icon)
+                .font(.system(size: 12))
+                .foregroundStyle(color)
+        }
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // MARK: - Screen 5: Test Dictation
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private var testDictationPage: some View {
         VStack(spacing: 0) {
@@ -308,27 +332,28 @@ struct OnboardingView: View {
                 OnboardingHeading(text: "Say anything and see\nit appear like magic ✨")
                     .padding(.top, 24)
 
+                // Text field card
                 VStack(alignment: .leading) {
                     if testTranscript.isEmpty {
                         Text("Say something!")
                             .font(AppTheme.onboardingBody)
-                            .foregroundStyle(AppTheme.onboardingSecondaryText.opacity(0.5))
+                            .foregroundStyle(AppTheme.accentOrange.opacity(0.6))
                     } else {
                         Text(testTranscript)
                             .font(AppTheme.onboardingBody)
-                            .foregroundStyle(AppTheme.onboardingPrimaryText)
+                            .foregroundStyle(AppTheme.onSurface)
                     }
                 }
                 .frame(maxWidth: .infinity, minHeight: 100, alignment: .topLeading)
                 .padding()
-                .background(AppTheme.onboardingCardBg)
-                .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-                .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 4)
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadiusSmall))
+                .shadow(color: Color(hex: "#1B1B22").opacity(0.04), radius: 8, x: 0, y: 2)
 
                 if showTestSuccess {
                     Text("Congrats on your first dictation 🎉")
                         .font(AppTheme.onboardingBody)
-                        .foregroundStyle(AppTheme.onboardingPrimaryText)
+                        .foregroundStyle(AppTheme.onSurface)
                         .padding(.top, 8)
 
                     DarkCTAButton(title: "Next") {
@@ -339,7 +364,7 @@ struct OnboardingView: View {
                         ProgressView()
                         Text("Processing...")
                             .font(AppTheme.onboardingSubhead)
-                            .foregroundStyle(AppTheme.onboardingSecondaryText)
+                            .foregroundStyle(AppTheme.onSurfaceVariant)
                     }
                     .padding(.top, 16)
                 } else if isRecording {
@@ -347,7 +372,7 @@ struct OnboardingView: View {
                         HStack(spacing: 4) {
                             ForEach(0..<9, id: \.self) { _ in
                                 Circle()
-                                    .fill(AppTheme.onboardingPrimaryText)
+                                    .fill(AppTheme.onSurface)
                                     .frame(width: 8, height: 8)
                                     .opacity(Double.random(in: 0.3...1.0))
                             }
@@ -355,7 +380,7 @@ struct OnboardingView: View {
 
                         Text("Listening...")
                             .font(AppTheme.onboardingSubhead)
-                            .foregroundStyle(AppTheme.onboardingSecondaryText)
+                            .foregroundStyle(AppTheme.onSurfaceVariant)
 
                         HStack(spacing: 24) {
                             Button {
@@ -365,9 +390,9 @@ struct OnboardingView: View {
                             } label: {
                                 Image(systemName: "xmark")
                                     .font(.system(size: 18, weight: .medium))
-                                    .foregroundStyle(AppTheme.onboardingPrimaryText)
+                                    .foregroundStyle(AppTheme.onSurface)
                                     .frame(width: 44, height: 44)
-                                    .background(AppTheme.settingsRowBg)
+                                    .background(AppTheme.surfaceContainerHigh)
                                     .clipShape(Circle())
                             }
 
@@ -400,7 +425,7 @@ struct OnboardingView: View {
                     if !testError.isEmpty {
                         Text(testError)
                             .font(AppTheme.onboardingPrivacyFont)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(AppTheme.error)
                             .multilineTextAlignment(.center)
                             .padding(.top, 8)
                     }
@@ -408,7 +433,7 @@ struct OnboardingView: View {
                     HStack {
                         Text("Tap the mic to start speaking →")
                             .font(AppTheme.onboardingSubhead)
-                            .foregroundStyle(AppTheme.onboardingSecondaryText)
+                            .foregroundStyle(AppTheme.onSurfaceVariant)
 
                         Button {
                             Task {
@@ -452,9 +477,9 @@ struct OnboardingView: View {
         }
     }
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // MARK: - Screen 6: How to Use Keyboard (LAST)
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // MARK: - Screen 6: Use Keyboard (LAST)
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private var useKeyboardPage: some View {
         VStack(spacing: 0) {
@@ -470,7 +495,7 @@ struct OnboardingView: View {
 
             Text("In any text field, tap and hold 🌐\nthen select Stop Typing")
                 .font(AppTheme.onboardingSubhead)
-                .foregroundStyle(AppTheme.onboardingSecondaryText)
+                .foregroundStyle(AppTheme.onSurfaceVariant)
                 .multilineTextAlignment(.center)
                 .padding(.bottom, 32)
 
@@ -481,9 +506,9 @@ struct OnboardingView: View {
                 switcherRow("Emoji", selected: false, divider: true)
                 switcherRow("Stop Typing", selected: true, divider: false)
             }
-            .background(Color(.systemBackground))
+            .background(Color.white)
             .clipShape(RoundedRectangle(cornerRadius: 12))
-            .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
+            .shadow(color: Color(hex: "#1B1B22").opacity(0.1), radius: 12, x: 0, y: 4)
             .padding(.horizontal, 60)
 
             Spacer()
@@ -501,7 +526,7 @@ struct OnboardingView: View {
             HStack {
                 Text(title)
                     .font(.system(size: 16))
-                    .foregroundStyle(selected ? .blue : AppTheme.onboardingPrimaryText)
+                    .foregroundStyle(selected ? .blue : AppTheme.onSurface)
                     .fontWeight(selected ? .medium : .regular)
                 Spacer()
                 if selected {
