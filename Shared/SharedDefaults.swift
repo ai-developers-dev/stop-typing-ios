@@ -47,48 +47,35 @@ final class SharedDefaults {
     // MARK: - Session Heartbeat
 
     var heartbeat: Date? {
-        get {
-            defaults.synchronize()
-            return defaults.object(forKey: AppGroupConfig.heartbeatKey) as? Date
-        }
-        set {
-            defaults.set(newValue, forKey: AppGroupConfig.heartbeatKey)
-            defaults.synchronize()
-        }
+        get { defaults.object(forKey: AppGroupConfig.heartbeatKey) as? Date }
+        set { defaults.set(newValue, forKey: AppGroupConfig.heartbeatKey) }
     }
 
     var isRecording: Bool {
-        get {
-            defaults.synchronize()
-            return defaults.bool(forKey: AppGroupConfig.isRecordingKey)
-        }
-        set {
-            defaults.set(newValue, forKey: AppGroupConfig.isRecordingKey)
-            defaults.synchronize()
-        }
+        get { defaults.bool(forKey: AppGroupConfig.isRecordingKey) }
+        set { defaults.set(newValue, forKey: AppGroupConfig.isRecordingKey) }
     }
 
     var sessionActive: Bool {
-        get {
-            defaults.synchronize()
-            return defaults.bool(forKey: AppGroupConfig.sessionActiveKey)
-        }
-        set {
-            defaults.set(newValue, forKey: AppGroupConfig.sessionActiveKey)
-            defaults.synchronize()
-        }
+        get { defaults.bool(forKey: AppGroupConfig.sessionActiveKey) }
+        set { defaults.set(newValue, forKey: AppGroupConfig.sessionActiveKey) }
     }
 
-    /// Returns true if the main app heartbeat is recent (within 5 seconds).
+    /// Returns true if the main app heartbeat is recent (within 10 seconds).
     func isAppAlive() -> Bool {
-        defaults.synchronize()
         guard let beat = defaults.object(forKey: AppGroupConfig.heartbeatKey) as? Date else { return false }
         return Date().timeIntervalSince(beat) < 10.0
     }
 
+    /// Returns true if the app has sent a heartbeat within 120 seconds.
+    /// Used only for crash/termination detection.
+    func isAppReachable() -> Bool {
+        guard let beat = defaults.object(forKey: AppGroupConfig.heartbeatKey) as? Date else { return false }
+        return Date().timeIntervalSince(beat) < 120.0
+    }
+
     func writeHeartbeat() {
         defaults.set(Date(), forKey: AppGroupConfig.heartbeatKey)
-        defaults.synchronize()
     }
 
     /// Audio level (0.0 to 1.0) written by the app ~10x/sec, read by the keyboard for waveform.

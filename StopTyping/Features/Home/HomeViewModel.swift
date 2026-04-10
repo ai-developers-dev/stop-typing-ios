@@ -8,18 +8,12 @@ final class HomeViewModel: ObservableObject {
     @Published var showError: Bool = false
     @Published var errorMessage: String = ""
 
-    private let transcriptionService: AppleSpeechService
-    private let sharedState: SharedStateManager
-    private let permissions: PermissionsManager
+    private lazy var transcriptionService = AppleSpeechService()
+    private lazy var sharedState = SharedStateManager.shared
+    private lazy var permissions = PermissionsManager()
 
     var isRecording: Bool { transcriptionState == .recording }
     var isProcessing: Bool { transcriptionState == .processing }
-
-    init() {
-        self.transcriptionService = AppleSpeechService()
-        self.sharedState = SharedStateManager.shared
-        self.permissions = PermissionsManager()
-    }
 
     func startFlow() async {
         // Check permissions first

@@ -74,9 +74,7 @@ final class GroqService {
         Output: {"text": "I am so excited about this!"}
         """
 
-    private init() {
-        SharedDefaults.shared.appendLog("APP: GroqService init — key length: \(apiKey.count)")
-    }
+    private init() {}
 
     // MARK: - Clean Transcript
 

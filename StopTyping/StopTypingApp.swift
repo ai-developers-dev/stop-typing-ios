@@ -4,6 +4,7 @@ import SwiftUI
 struct StopTypingApp: App {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @State private var showDictationActivation = false
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -29,6 +30,19 @@ struct StopTypingApp: App {
             }
             .onOpenURL { url in
                 handleDeepLink(url)
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                let service = BackgroundDictationService.shared
+                switch newPhase {
+                case .background:
+                    service.handleBackground()
+                case .active:
+                    service.handleForeground()
+                case .inactive:
+                    break
+                @unknown default:
+                    break
+                }
             }
         }
     }

@@ -42,35 +42,13 @@ final class BackgroundDictationService: ObservableObject {
 
         log("Activating session...")
 
-        SFSpeechRecognizer.requestAuthorization { [weak self] status in
-            DispatchQueue.main.async { self?.log("Speech auth: \(status.rawValue)") }
-        }
-
-        do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playAndRecord, mode: .measurement,
-                                    options: [.mixWithOthers, .defaultToSpeaker, .allowBluetooth])
-            try session.setActive(true, options: .notifyOthersOnDeactivation)
-            log("Audio session active")
-        } catch {
-            log("Audio session FAILED: \(error)")
-            return
-        }
-
-        startIdleAudioEngine()
-
-        let timer = DispatchSource.makeTimerSource(queue: .global(qos: .userInitiated))
-        timer.schedule(deadline: .now(), repeating: 2.0)
-        timer.setEventHandler { [weak self] in self?.defaults.writeHeartbeat() }
-        timer.resume()
-        heartbeatTimer = timer
-
+        // Mark session active immediately so UI updates instantly
         defaults.writeHeartbeat()
         defaults.sessionActive = true
         defaults.audioLevel = 0
-        isSessionActive = true
+        DispatchQueue.main.async { self.isSessionActive = true }
 
-        // Listen for keyboard signals
+        // Listen for keyboard signals (lightweight, safe on any thread)
         darwin.observe(DarwinNotificationName.startDictation) { [weak self] in
             self?.log("Received: startDictation")
             self?.startRecording()
@@ -89,10 +67,102 @@ final class BackgroundDictationService: ObservableObject {
             object: nil, queue: .main
         ) { [weak self] _ in self?.deactivateSession() }
 
-        log("Session ACTIVE")
+        // Heavy audio work OFF the main thread — this is what was blocking the UI
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
 
-        // Start Live Activity for Dynamic Island (non-blocking)
-        startLiveActivity()
+            SFSpeechRecognizer.requestAuthorization { [weak self] status in
+                DispatchQueue.main.async { self?.log("Speech auth: \(status.rawValue)") }
+            }
+
+            do {
+                let session = AVAudioSession.sharedInstance()
+                try session.setCategory(.playAndRecord, mode: .measurement,
+                                        options: [.mixWithOthers, .defaultToSpeaker, .allowBluetooth])
+                try session.setActive(true, options: .notifyOthersOnDeactivation)
+                self.log("Audio session active")
+            } catch {
+                self.log("Audio session FAILED: \(error)")
+                DispatchQueue.main.async {
+                    self.defaults.clearSession()
+                    self.isSessionActive = false
+                }
+                return
+            }
+
+            self.startIdleAudioEngine()
+
+            let timer = DispatchSource.makeTimerSource(queue: .global(qos: .userInitiated))
+            timer.schedule(deadline: .now(), repeating: 2.0)
+            timer.setEventHandler { [weak self] in self?.defaults.writeHeartbeat() }
+            timer.resume()
+            self.heartbeatTimer = timer
+
+            self.log("Session ACTIVE")
+
+            // Start Live Activity for Dynamic Island
+            self.startLiveActivity()
+        }
+    }
+
+    // MARK: - App Lifecycle
+
+    func handleBackground() {
+        guard isSessionActive else { return }
+        log("App entering background — session stays active")
+
+        // Session stays active, Live Activity stays visible, sessionActive stays true.
+        // The heartbeat timer will be suspended by iOS automatically — that's fine
+        // because the keyboard now checks sessionActive (not heartbeat) to decide state.
+
+        // If actively recording, clean up since the audio engine will be suspended
+        if isCurrentlyRecording {
+            log("Was recording when backgrounded — cleaning up")
+            stopEngine()
+            recognitionRequest?.endAudio()
+
+            let rawTranscript = currentTranscript
+            cleanupRecording()
+            updateLiveActivity(isRecording: false)
+
+            // Save whatever transcript we had
+            if !rawTranscript.isEmpty {
+                Task {
+                    let cleaned = await GroqService.shared.cleanTranscript(rawTranscript)
+                    await MainActor.run {
+                        self.lastTranscript = cleaned
+                        self.defaults.saveTranscript(cleaned)
+                        TranscriptHistoryStore.shared.add(TranscriptItem(text: cleaned))
+                        self.darwin.post(DarwinNotificationName.transcriptReady)
+                        self.log("Saved in-progress transcript on background")
+                    }
+                }
+            }
+
+            startIdleAudioEngine()
+        }
+    }
+
+    func handleForeground() {
+        guard isSessionActive else { return }
+        log("App returning to foreground — refreshing heartbeat")
+
+        // Write heartbeat immediately so timestamp is fresh
+        defaults.writeHeartbeat()
+
+        // Restart heartbeat timer if it was suspended
+        if heartbeatTimer == nil {
+            let timer = DispatchSource.makeTimerSource(queue: .global(qos: .userInitiated))
+            timer.schedule(deadline: .now(), repeating: 2.0)
+            timer.setEventHandler { [weak self] in self?.defaults.writeHeartbeat() }
+            timer.resume()
+            heartbeatTimer = timer
+        }
+
+        // Restart Live Activity if it was dismissed
+        if currentActivity == nil {
+            startLiveActivity()
+        }
     }
 
     // MARK: - Live Activity
@@ -290,12 +360,20 @@ final class BackgroundDictationService: ObservableObject {
         defaults.audioLevel = 0
         previousAudioLevel = 0
 
+        // Update Live Activity and recording state immediately — don't wait for transcript processing
+        defaults.isRecording = false
+        DispatchQueue.main.async { self.isCurrentlyRecording = false }
+        updateLiveActivity(isRecording: false)
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             guard let self else { return }
             let rawTranscript = self.currentTranscript
             self.log("Raw ASR: '\(rawTranscript.prefix(80))'")
 
-            self.cleanupRecording()
+            self.recognitionTask?.cancel()
+            self.recognitionTask = nil
+            self.recognitionRequest = nil
+            self.currentTranscript = ""
 
             if !rawTranscript.isEmpty {
                 Task {
@@ -308,7 +386,6 @@ final class BackgroundDictationService: ObservableObject {
                         TranscriptHistoryStore.shared.add(TranscriptItem(text: cleanedTranscript))
                         self.darwin.post(DarwinNotificationName.transcriptReady)
                         self.log("Cleaned transcript saved, notified keyboard")
-                        self.updateLiveActivity(isRecording: false)
                     }
                 }
             } else {

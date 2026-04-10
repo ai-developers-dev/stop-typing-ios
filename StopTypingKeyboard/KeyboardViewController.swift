@@ -14,12 +14,12 @@ class KeyboardViewController: UIInputViewController {
 
     override init(nibName nibNameOrNil: String?, bundle nibBundleOrNil: Bundle?) {
         super.init(nibName: nibNameOrNil, bundle: nibBundleOrNil)
-        hasDictationKey = true
+        hasDictationKey = false
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
-        hasDictationKey = true
+        hasDictationKey = false
     }
 
     private func klog(_ msg: String) {
@@ -28,16 +28,17 @@ class KeyboardViewController: UIInputViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        hasDictationKey = true
+        hasDictationKey = false
 
         // Match the exact same color as our SwiftUI keyboard background
         // This fills the area above our VStack so no different-shade gray shows
         view.backgroundColor = .systemGray6
         inputView?.backgroundColor = .systemGray6
 
-        // Use sessionActive boolean for instant check — no timestamp staleness
-        isAppAlive = SharedDefaults.shared.sessionActive
-        isRecording = SharedDefaults.shared.isRecording
+        // Use sessionActive boolean — this persists even when app is backgrounded
+        let defaults = SharedDefaults.shared
+        isAppAlive = defaults.sessionActive
+        isRecording = defaults.isRecording
 
         setupKeyboardView()
         registerDarwinObservers()
@@ -45,7 +46,7 @@ class KeyboardViewController: UIInputViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        hasDictationKey = true
+        hasDictationKey = false
         // Immediate state check + UI rebuild — don't wait for timer
         refreshState()
         rebuildView()
@@ -134,9 +135,22 @@ class KeyboardViewController: UIInputViewController {
 
     private func refreshState() {
         let wasAlive = isAppAlive
-        isAppAlive = SharedDefaults.shared.isAppAlive()
-        isRecording = SharedDefaults.shared.isRecording
-        if isAppAlive != wasAlive {
+        let wasRecording = isRecording
+        let defaults = SharedDefaults.shared
+
+        // Use sessionActive as the primary check — it stays true even when the app
+        // is backgrounded. Only goes false when user explicitly deactivates or app terminates.
+        //
+        // Safety net: if heartbeat is older than 120 seconds, the app was likely killed by iOS.
+        // In that case, clear the stale session so the user isn't stuck in a broken state.
+        if defaults.sessionActive && !defaults.isAppReachable() {
+            defaults.clearSession()
+        }
+
+        isAppAlive = defaults.sessionActive
+        isRecording = defaults.isRecording
+
+        if isAppAlive != wasAlive || isRecording != wasRecording {
             rebuildView()
         }
     }

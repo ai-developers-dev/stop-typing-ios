@@ -10,22 +10,31 @@ final class TranscriptHistoryStore: ObservableObject {
 
     private let storageKey = "transcriptHistory"
 
-    private init() {
+    private var hasLoaded = false
+
+    private init() {}
+
+    func ensureLoaded() {
+        guard !hasLoaded else { return }
+        hasLoaded = true
         load()
     }
 
     func add(_ item: TranscriptItem) {
+        ensureLoaded()
         items.insert(item, at: 0)
         save()
     }
 
     func remove(at offsets: IndexSet) {
+        ensureLoaded()
         items.remove(atOffsets: offsets)
         save()
     }
 
     func clearAll() {
         items.removeAll()
+        hasLoaded = true
         save()
     }
 
@@ -83,6 +92,7 @@ struct HistoryView: View {
             }
             .background(AppTheme.background)
             .navigationTitle("History")
+            .onAppear { store.ensureLoaded() }
             .toolbar {
                 if !store.items.isEmpty {
                     ToolbarItem(placement: .topBarTrailing) {

@@ -53,6 +53,7 @@
 		AA000051 /* KeyboardRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000051 /* KeyboardRootView.swift */; };
 		AA000060 /* StopTypingKeyboard.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = DD000002 /* StopTypingKeyboard.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AA000070 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB000080 /* Assets.xcassets */; };
+		AA000071 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = BB000081 /* LaunchScreen.storyboard */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -130,6 +131,7 @@
 		BB000070 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		BB000071 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		BB000080 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		BB000081 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		DD000002 /* StopTypingKeyboard.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = StopTypingKeyboard.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		DD000003 /* StopTyping.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StopTyping.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -203,6 +205,7 @@
 				BB000001 /* StopTypingApp.swift */,
 				BB000070 /* Info.plist */,
 				BB000080 /* Assets.xcassets */,
+				BB000081 /* LaunchScreen.storyboard */,
 				GG000003 /* Theme */,
 				GG000004 /* Models */,
 				GG000005 /* Services */,
@@ -493,6 +496,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA000070 /* Assets.xcassets in Resources */,
+				AA000071 /* LaunchScreen.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -694,7 +698,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Stop Typing";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				MARKETING_VERSION = 1.0.0;
@@ -719,7 +723,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Stop Typing";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				MARKETING_VERSION = 1.0.0;

@@ -5,10 +5,10 @@ import Foundation
 final class AppleSpeechService: TranscriptionService, ObservableObject {
     @Published private(set) var state: TranscriptionState = .idle
 
-    private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+    private lazy var speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
-    private let audioEngine = AVAudioEngine()
+    private lazy var audioEngine = AVAudioEngine()
     private var currentTranscript = ""
 
     func startRecording() async throws {

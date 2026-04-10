@@ -153,10 +153,10 @@ struct KeyboardRootView: View {
 
             Button { onStartDictation() } label: {
                 Image(systemName: "mic.fill")
-                    .font(.system(size: 18))
+                    .font(.system(size: 20))
                     .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-                    .background(darkBg)
+                    .frame(width: 48, height: 48)
+                    .background(Color(UIColor.systemGray3))
                     .clipShape(Circle())
             }
         }
