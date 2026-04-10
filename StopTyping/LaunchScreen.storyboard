@@ -16,6 +16,13 @@
                         <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="STLogo" translatesAutoresizingMaskIntoConstraints="NO" id="st-logo-image">
+                                <rect key="frame" x="126.5" y="120" width="140" height="196"/>
+                                <constraints>
+                                    <constraint firstAttribute="width" constant="140" id="logo-width"/>
+                                    <constraint firstAttribute="height" constant="196" id="logo-height"/>
+                                </constraints>
+                            </imageView>
                             <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Loading..." textAlignment="center" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="loading-label">
                                 <rect key="frame" x="136.66" y="410" width="120" height="33"/>
                                 <fontDescription key="fontDescription" type="system" weight="semibold" pointSize="28"/>
@@ -26,6 +33,8 @@
                         <viewLayoutGuide key="safeArea" id="fnl-2z-Ty3"/>
                         <color key="backgroundColor" red="0.48627450980392156" green="0.22745098039215686" blue="0.92941176470588238" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                         <constraints>
+                            <constraint firstItem="st-logo-image" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="logo-center-x"/>
+                            <constraint firstItem="st-logo-image" firstAttribute="top" secondItem="fnl-2z-Ty3" secondAttribute="top" constant="80" id="logo-top"/>
                             <constraint firstItem="loading-label" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="center-x"/>
                             <constraint firstItem="loading-label" firstAttribute="centerY" secondItem="Ze5-6b-2t3" secondAttribute="centerY" id="center-y"/>
                         </constraints>
@@ -36,4 +45,7 @@
             <point key="canvasLocation" x="53" y="375"/>
         </scene>
     </scenes>
+    <resources>
+        <image name="STLogo" width="200" height="280"/>
+    </resources>
 </document>

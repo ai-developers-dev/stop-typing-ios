@@ -4,6 +4,7 @@ import SwiftUI
 struct StopTypingApp: App {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @State private var showDictationActivation = false
+    @State private var overlayRefreshToken = UUID()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
@@ -25,6 +26,7 @@ struct StopTypingApp: App {
                     DictationOverlayView(onClose: {
                         withAnimation { showDictationActivation = false }
                     })
+                    .id(overlayRefreshToken)
                     .zIndex(100)
                 }
             }
@@ -38,10 +40,20 @@ struct StopTypingApp: App {
                     service.handleBackground()
                 case .active:
                     service.handleForeground()
+                    // Refresh the overlay so it doesn't show stale content after a return
+                    if showDictationActivation {
+                        overlayRefreshToken = UUID()
+                    }
                 case .inactive:
                     break
                 @unknown default:
                     break
+                }
+            }
+            .onChange(of: hasCompletedOnboarding) { _, completed in
+                // After finishing onboarding, land directly on the activation overlay
+                if completed {
+                    showDictationActivation = true
                 }
             }
         }
@@ -52,7 +64,13 @@ struct StopTypingApp: App {
 
         switch url.host {
         case "activate", "dictate":
-            showDictationActivation = true
+            if showDictationActivation {
+                // Overlay already visible — force a fresh rebuild so .onAppear re-fires
+                // and activateSession()'s self-healing path runs
+                overlayRefreshToken = UUID()
+            } else {
+                showDictationActivation = true
+            }
         default:
             break
         }

@@ -35,8 +35,11 @@ final class BackgroundDictationService: ObservableObject {
     // MARK: - Activate Session
 
     func activateSession() {
-        guard !isSessionActive else {
-            log("Session already active")
+        // If already active, verify the audio pipeline is healthy.
+        // iOS may have deactivated our audio session while suspended — we need to recover.
+        if isSessionActive {
+            log("Session already active — verifying audio pipeline")
+            reactivateAudioPipeline()
             return
         }
 
@@ -66,6 +69,25 @@ final class BackgroundDictationService: ObservableObject {
             forName: UIApplication.willTerminateNotification,
             object: nil, queue: .main
         ) { [weak self] _ in self?.deactivateSession() }
+
+        // Handle audio session interruptions (incoming calls, Siri, AND app suspension recovery)
+        NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: nil
+        ) { [weak self] notification in
+            self?.handleAudioInterruption(notification)
+        }
+
+        // Handle audio engine config changes (route changes, wake from sleep)
+        NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            self?.log("AVAudioEngine config changed — restarting idle engine")
+            self?.reactivateAudioPipeline()
+        }
 
         // Heavy audio work OFF the main thread — this is what was blocking the UI
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -102,6 +124,66 @@ final class BackgroundDictationService: ObservableObject {
 
             // Start Live Activity for Dynamic Island
             self.startLiveActivity()
+        }
+    }
+
+    // MARK: - Audio Interruption Handling
+    //
+    // Per Apple docs: "Starting in iOS 10, the system deactivates an app's audio session
+    // when it suspends the app process. When the app starts running again, it receives an
+    // interruption notification that the system has deactivated its audio session."
+    // We handle this by reactivating the audio pipeline on interruption .ended.
+
+    private func handleAudioInterruption(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: typeValue) else { return }
+
+        switch type {
+        case .began:
+            let wasSuspended = (userInfo[AVAudioSessionInterruptionWasSuspendedKey] as? Bool) ?? false
+            log("Audio interruption BEGAN (wasSuspended: \(wasSuspended))")
+            // Don't change session state — we want to recover, not tear down
+
+        case .ended:
+            log("Audio interruption ENDED")
+            if let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt {
+                let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
+                log("  shouldResume: \(options.contains(.shouldResume))")
+            }
+            // Always reactivate — iOS tells us we can resume
+            reactivateAudioPipeline()
+
+        @unknown default:
+            break
+        }
+    }
+
+    /// Self-healing audio pipeline restart. Safe to call repeatedly.
+    /// Reactivates AVAudioSession and restarts the idle engine from scratch.
+    private func reactivateAudioPipeline() {
+        // Don't interfere with active recording
+        if isCurrentlyRecording {
+            log("reactivateAudioPipeline: skipping (recording in progress)")
+            return
+        }
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+
+            do {
+                let session = AVAudioSession.sharedInstance()
+                try session.setCategory(.playAndRecord, mode: .measurement,
+                                        options: [.mixWithOthers, .defaultToSpeaker, .allowBluetooth])
+                try session.setActive(true, options: .notifyOthersOnDeactivation)
+                self.log("Audio session reactivated")
+            } catch {
+                self.log("Audio session reactivate FAILED: \(error)")
+                return
+            }
+
+            self.startIdleAudioEngine()
+            self.defaults.writeHeartbeat()
         }
     }
 
@@ -145,7 +227,7 @@ final class BackgroundDictationService: ObservableObject {
 
     func handleForeground() {
         guard isSessionActive else { return }
-        log("App returning to foreground — refreshing heartbeat")
+        log("App returning to foreground — refreshing pipeline")
 
         // Write heartbeat immediately so timestamp is fresh
         defaults.writeHeartbeat()
@@ -158,6 +240,9 @@ final class BackgroundDictationService: ObservableObject {
             timer.resume()
             heartbeatTimer = timer
         }
+
+        // ALWAYS reactivate audio pipeline — iOS may have deactivated it during suspend
+        reactivateAudioPipeline()
 
         // Restart Live Activity if it was dismissed
         if currentActivity == nil {

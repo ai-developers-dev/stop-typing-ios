@@ -138,15 +138,9 @@ class KeyboardViewController: UIInputViewController {
         let wasRecording = isRecording
         let defaults = SharedDefaults.shared
 
-        // Use sessionActive as the primary check — it stays true even when the app
-        // is backgrounded. Only goes false when user explicitly deactivates or app terminates.
-        //
-        // Safety net: if heartbeat is older than 120 seconds, the app was likely killed by iOS.
-        // In that case, clear the stale session so the user isn't stuck in a broken state.
-        if defaults.sessionActive && !defaults.isAppReachable() {
-            defaults.clearSession()
-        }
-
+        // Trust sessionActive — it stays true across app backgrounding and sleep.
+        // The app uses UIApplication.willTerminateNotification to clear it on termination,
+        // and handles AVAudioSession interruptions to self-heal after system suspension.
         isAppAlive = defaults.sessionActive
         isRecording = defaults.isRecording
 
