@@ -134,10 +134,10 @@ final class SharedDefaults {
         let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         let line = "[\(timestamp)] \(msg)\n"
         var log = debugLog
-        // Keep last 30 lines
+        // Keep last 200 lines (larger buffer so we don't trim the error context)
         let lines = log.components(separatedBy: "\n")
-        if lines.count > 30 {
-            log = lines.suffix(20).joined(separator: "\n")
+        if lines.count > 200 {
+            log = lines.suffix(150).joined(separator: "\n")
         }
         log += line
         debugLog = log

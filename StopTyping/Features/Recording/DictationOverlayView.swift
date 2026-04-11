@@ -6,6 +6,7 @@ import SwiftUI
 struct DictationOverlayView: View {
     @ObservedObject private var service = BackgroundDictationService.shared
     @Environment(\.dismiss) private var dismiss
+    @State private var showCopiedToast = false
     let onClose: () -> Void
 
     init(onClose: @escaping () -> Void = {}) {
@@ -13,6 +14,27 @@ struct DictationOverlayView: View {
     }
 
     var body: some View {
+        ZStack {
+            mainContent
+            if showCopiedToast {
+                VStack {
+                    Spacer()
+                    Text("✓ Copied to clipboard")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color.black.opacity(0.85))
+                        .clipShape(Capsule())
+                        .padding(.bottom, 40)
+                }
+                .transition(.opacity)
+                .zIndex(200)
+            }
+        }
+    }
+
+    private var mainContent: some View {
         VStack(spacing: 0) {
             // Close button
             HStack {
@@ -136,19 +158,9 @@ struct DictationOverlayView: View {
             }
             .padding(.vertical, 20)
 
-            // Debug log — remove before shipping
+            // Debug log with Copy + Clear buttons
             if !service.debugLog.isEmpty {
-                ScrollView {
-                    Text(service.debugLog)
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(Color(UIColor.secondaryLabel))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(maxHeight: 120)
-                .padding(.horizontal, 16)
-                .background(Color(UIColor.systemGray6))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .padding(.horizontal, 16)
+                debugLogPanel
             }
 
             Spacer().frame(height: 20)
@@ -156,6 +168,60 @@ struct DictationOverlayView: View {
         .background(Color(UIColor.systemBackground))
         .onAppear {
             service.activateSession()
+        }
+    }
+
+    // MARK: - Debug Log Panel (with Copy + Clear buttons)
+
+    private var debugLogPanel: some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 8) {
+                Text("Debug Log")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color(UIColor.secondaryLabel))
+                Spacer()
+                Button {
+                    UIPasteboard.general.string = service.debugLog
+                    withAnimation { showCopiedToast = true }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        withAnimation { showCopiedToast = false }
+                    }
+                } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.blue)
+                        .clipShape(Capsule())
+                }
+                Button {
+                    SharedDefaults.shared.clearDebugLog()
+                    service.debugLog = ""
+                } label: {
+                    Label("Clear", systemImage: "trash")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color(UIColor.label))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color(UIColor.systemGray4))
+                        .clipShape(Capsule())
+                }
+            }
+            .padding(.horizontal, 16)
+
+            ScrollView {
+                Text(service.debugLog)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(Color(UIColor.label))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+            }
+            .frame(maxHeight: 260)
+            .background(Color(UIColor.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .padding(.horizontal, 16)
         }
     }
 
