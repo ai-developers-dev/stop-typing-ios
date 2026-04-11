@@ -632,6 +632,7 @@ final class BackgroundDictationService: ObservableObject {
         currentTranscript = ""
         currentTapBufferCount = 0
         currentPartialResultCount = 0
+        audioLevelLogCounter = 0
         currentRecordingStartTime = Date()
         defaults.isRecording = true
         defaults.audioLevel = 0
@@ -775,6 +776,11 @@ final class BackgroundDictationService: ObservableObject {
 
     // MARK: - Audio Level Metering
 
+    /// Counter used to sample-log audioLevel values periodically during
+    /// recording, so we can see in the debug log what values the keyboard
+    /// is actually seeing.
+    private var audioLevelLogCounter: Int = 0
+
     private func updateAudioLevel(buffer: AVAudioPCMBuffer) {
         guard let channelData = buffer.floatChannelData?[0] else { return }
         let frameLength = vDSP_Length(buffer.frameLength)
@@ -784,13 +790,30 @@ final class BackgroundDictationService: ObservableObject {
         var rms: Float = 0
         vDSP_rmsqv(channelData, 1, &rms, frameLength)
 
-        // Exponential moving average smoothing — prevents jitter
-        let alpha: Float = 0.3
-        let smoothed = alpha * rms + (1 - alpha) * previousAudioLevel
+        // Convert RMS to dB, then normalize to 0...1 range.
+        // Speech RMS is typically 0.005 (quiet) to 0.1 (loud) linear.
+        // In dB that's roughly -46dB to -20dB.
+        // Anything below -55dB is effectively silence.
+        let minDb: Float = -55.0
+        let maxDb: Float = -15.0
+        let db = 20.0 * log10(max(rms, 0.00001))
+        let normalized = max(0, min(1, (db - minDb) / (maxDb - minDb)))
+
+        // Snappier EMA smoothing (alpha=0.6 = 60% weight on new sample).
+        // Old value was 0.3 which made the waveform lag noticeably behind
+        // the voice.
+        let alpha: Float = 0.6
+        let smoothed = alpha * normalized + (1 - alpha) * previousAudioLevel
         previousAudioLevel = smoothed
 
-        let level = min(1.0, smoothed * 5.0)
-        defaults.audioLevel = level
+        defaults.audioLevel = smoothed
+
+        // Log every ~10 buffers (roughly 250ms at 43Hz buffer rate) so we
+        // can see the actual levels flowing through without flooding the log.
+        audioLevelLogCounter += 1
+        if audioLevelLogCounter % 10 == 0 {
+            log("  📊 audioLevel: rms=\(String(format: "%.4f", rms)) db=\(String(format: "%.1f", db)) normalized=\(String(format: "%.3f", normalized)) smoothed=\(String(format: "%.3f", smoothed))")
+        }
     }
 
     // MARK: - Stop Recording (save transcript)

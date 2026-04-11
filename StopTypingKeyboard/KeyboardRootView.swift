@@ -209,16 +209,25 @@ struct KeyboardRootView: View {
 
             Spacer()
 
-            // Audio-reactive waveform
-            HStack(spacing: 3.5) {
+            // Audio-reactive waveform — bigger, more prominent bars
+            HStack(spacing: 4) {
                 ForEach(0..<25, id: \.self) { i in
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(Color(UIColor.label))
-                        .frame(width: 4, height: waveformBars[i])
-                        .animation(.interpolatingSpring(stiffness: 300, damping: 15), value: waveformBars[i])
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 0.49, green: 0.23, blue: 0.93),
+                                    Color(red: 0.65, green: 0.55, blue: 0.98)
+                                ],
+                                startPoint: .bottom,
+                                endPoint: .top
+                            )
+                        )
+                        .frame(width: 6, height: waveformBars[i])
+                        .animation(.interpolatingSpring(stiffness: 400, damping: 18), value: waveformBars[i])
                 }
             }
-            .frame(height: 80)
+            .frame(height: 120)
             .onAppear { startWaveformPolling() }
             .onDisappear { stopWaveformPolling() }
 
@@ -399,19 +408,24 @@ struct KeyboardRootView: View {
         // Force clean any existing timer
         waveformTimer?.invalidate()
         waveformTimer = nil
-        waveformBars = Array(repeating: 5, count: 25)
+        waveformBars = Array(repeating: 8, count: 25)
         lastSpeechTime = .distantPast
 
+        // Bell-curve pattern for bar heights across the waveform — center
+        // bars react most to voice, edges taper off for visual interest.
         let pattern: [CGFloat] = [
-            0.2, 0.35, 0.3, 0.5, 0.4, 0.6, 0.5, 0.75, 0.6, 0.85,
-            0.7, 0.95, 1.0, 0.95, 0.7,
-            0.85, 0.6, 0.75, 0.5, 0.6, 0.4, 0.5, 0.3, 0.35, 0.2
+            0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.95, 1.00,
+            1.00, 1.00, 1.00, 1.00, 1.00,
+            1.00, 0.95, 0.90, 0.85, 0.80, 0.70, 0.60, 0.50, 0.40, 0.30
         ]
 
-        waveformTimer = Timer.scheduledTimer(withTimeInterval: 0.07, repeats: true) { [self] _ in
+        waveformTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [self] _ in
             let level = CGFloat(SharedDefaults.shared.audioLevel)
-            let threshold: CGFloat = 0.03
-            let hold: TimeInterval = 0.25
+            // Anything above 0.05 (~5% of max) counts as speech — the
+            // updateAudioLevel dB scaling ensures typical speech lands at
+            // 0.3-0.8 and loud speech at 0.8-1.0.
+            let threshold: CGFloat = 0.05
+            let hold: TimeInterval = 0.4
 
             if level >= threshold {
                 lastSpeechTime = Date()
@@ -422,13 +436,14 @@ struct KeyboardRootView: View {
             var newBars: [CGFloat] = []
             for i in 0..<25 {
                 if isSpeaking {
-                    let maxH: CGFloat = 75
-                    let minH: CGFloat = 10
-                    let jitter = CGFloat.random(in: -0.1...0.1)
+                    let maxH: CGFloat = 115
+                    let minH: CGFloat = 14
+                    let jitter = CGFloat.random(in: -0.08...0.08)
                     let barLevel = max(0, min(1, level * pattern[i] + jitter))
                     newBars.append(minH + barLevel * (maxH - minH))
                 } else {
-                    newBars.append(5)
+                    // Gentle resting state — small bars, not totally flat
+                    newBars.append(8)
                 }
             }
             waveformBars = newBars
@@ -438,7 +453,7 @@ struct KeyboardRootView: View {
     private func stopWaveformPolling() {
         waveformTimer?.invalidate()
         waveformTimer = nil
-        waveformBars = Array(repeating: 5, count: 25)
+        waveformBars = Array(repeating: 8, count: 25)
         lastSpeechTime = .distantPast
     }
 
