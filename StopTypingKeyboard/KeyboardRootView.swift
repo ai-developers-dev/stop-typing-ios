@@ -1,4 +1,14 @@
 import SwiftUI
+import Combine
+
+/// Observable state shared between KeyboardViewController and KeyboardRootView.
+/// Owned by the controller so it survives any view rebuilds. When the controller
+/// updates its properties, SwiftUI re-renders just the affected sub-views without
+/// destroying the @State (e.g. waveformTimer, waveformBars).
+final class KeyboardState: ObservableObject {
+    @Published var isAppAlive: Bool = false
+    @Published var isRecording: Bool = false
+}
 
 struct KeyboardRootView: View {
     let onInsertText: (String) -> Void
@@ -10,8 +20,12 @@ struct KeyboardRootView: View {
     let onStopDictation: () -> Void
     let onCancelDictation: () -> Void
     var showGlobe: Bool = true
-    @Binding var isAppAlive: Bool
-    @Binding var isRecording: Bool
+    @ObservedObject var state: KeyboardState
+
+    // Convenience accessors — read through the state object so SwiftUI
+    // triggers body recomputation on changes.
+    private var isAppAlive: Bool { state.isAppAlive }
+    private var isRecording: Bool { state.isRecording }
 
     @State private var isShifted = false
     @State private var showNumbers = false

@@ -5,8 +5,21 @@ import Combine
 class KeyboardViewController: UIInputViewController {
 
     private var hostingController: UIHostingController<KeyboardRootView>?
-    private var isAppAlive = false
-    private var isRecording = false
+    /// Observable state that KeyboardRootView subscribes to. Owned here so it
+    /// survives view rebuilds. Mutating these @Published properties triggers a
+    /// targeted re-render without destroying any @State in the root view —
+    /// preserving waveformTimer, waveformBars, etc. across state changes.
+    private let keyboardState = KeyboardState()
+    // Accessors forward into keyboardState so the existing code paths
+    // (startDictation, refreshState, etc.) keep working unchanged.
+    private var isAppAlive: Bool {
+        get { keyboardState.isAppAlive }
+        set { keyboardState.isAppAlive = newValue }
+    }
+    private var isRecording: Bool {
+        get { keyboardState.isRecording }
+        set { keyboardState.isRecording = newValue }
+    }
     private var heartbeatTimer: Timer?
     private let darwin = DarwinNotificationCenter.shared
     private var lastInsertedTranscriptTimestamp: Date?
@@ -66,15 +79,6 @@ class KeyboardViewController: UIInputViewController {
     // MARK: - Setup
 
     private func setupKeyboardView() {
-        let appAliveBinding = Binding<Bool>(
-            get: { [weak self] in self?.isAppAlive ?? false },
-            set: { [weak self] in self?.isAppAlive = $0 }
-        )
-        let recordingBinding = Binding<Bool>(
-            get: { [weak self] in self?.isRecording ?? false },
-            set: { [weak self] in self?.isRecording = $0 }
-        )
-
         let keyboardView = KeyboardRootView(
             onInsertText: { [weak self] text in
                 self?.textDocumentProxy.insertText(text)
@@ -101,8 +105,7 @@ class KeyboardViewController: UIInputViewController {
                 self?.cancelDictation()
             },
             showGlobe: needsInputModeSwitchKey,
-            isAppAlive: appAliveBinding,
-            isRecording: recordingBinding
+            state: keyboardState
         )
 
         let host = UIHostingController(rootView: keyboardView)
@@ -178,47 +181,12 @@ class KeyboardViewController: UIInputViewController {
         }
     }
 
+    /// No-op now: state changes flow through keyboardState (@ObservableObject)
+    /// and SwiftUI re-renders the dependent parts of KeyboardRootView without
+    /// destroying the root view struct. Kept as a named function so existing
+    /// call sites don't need to be rewritten.
     private func rebuildView() {
-        guard let host = hostingController else { return }
-
-        let appAliveBinding = Binding<Bool>(
-            get: { [weak self] in self?.isAppAlive ?? false },
-            set: { [weak self] in self?.isAppAlive = $0 }
-        )
-        let recordingBinding = Binding<Bool>(
-            get: { [weak self] in self?.isRecording ?? false },
-            set: { [weak self] in self?.isRecording = $0 }
-        )
-
-        host.rootView = KeyboardRootView(
-            onInsertText: { [weak self] text in
-                self?.textDocumentProxy.insertText(text)
-            },
-            onDeleteBackward: { [weak self] in
-                self?.textDocumentProxy.deleteBackward()
-            },
-            onNextKeyboard: { [weak self] in
-                self?.advanceToNextInputMode()
-            },
-            onReturnKey: { [weak self] in
-                self?.textDocumentProxy.insertText("\n")
-            },
-            onOpenApp: { [weak self] in
-                self?.openMainApp()
-            },
-            onStartDictation: { [weak self] in
-                self?.startDictation()
-            },
-            onStopDictation: { [weak self] in
-                self?.stopDictation()
-            },
-            onCancelDictation: { [weak self] in
-                self?.cancelDictation()
-            },
-            showGlobe: needsInputModeSwitchKey,
-            isAppAlive: appAliveBinding,
-            isRecording: recordingBinding
-        )
+        // Intentionally empty — state is observed directly.
     }
 
     // MARK: - Actions
