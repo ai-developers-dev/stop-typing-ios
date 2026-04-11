@@ -665,6 +665,32 @@ final class BackgroundDictationService: ObservableObject {
                 return
             }
 
+            // Reuse-or-clean: enumerate every existing Activity of this type
+            // (including orphans from prior crashes, force-quits, missed end
+            // calls, or any future bug). If exactly one is alive AND matches
+            // our local reference, reuse it. Otherwise end them all and start
+            // fresh. This is the canonical "always exactly one" pattern from
+            // Apple's ActivityKit docs and sample code.
+            let existing = Activity<StopTypingWidgetAttributes>.activities
+            if existing.count == 1, let only = existing.first, only.id == currentActivity?.id {
+                log("Live Activity already running, reusing (id=\(only.id))")
+                return
+            }
+
+            if !existing.isEmpty {
+                log("Found \(existing.count) existing Live Activities — ending all before starting fresh")
+                let finalState = StopTypingWidgetAttributes.ContentState(isRecording: false, mode: "Formal")
+                for activity in existing {
+                    Task {
+                        await activity.end(
+                            ActivityContent(state: finalState, staleDate: nil),
+                            dismissalPolicy: .immediate
+                        )
+                    }
+                }
+                currentActivity = nil
+            }
+
             let attrs = StopTypingWidgetAttributes(sessionId: UUID().uuidString)
             let state = StopTypingWidgetAttributes.ContentState(isRecording: false, mode: "Formal")
 
@@ -673,7 +699,7 @@ final class BackgroundDictationService: ObservableObject {
                 content: .init(state: state, staleDate: nil),
                 pushType: nil
             )
-            log("Live Activity started")
+            log("Live Activity started (id=\(currentActivity?.id ?? "nil"))")
         } catch {
             log("Live Activity skipped: \(error.localizedDescription)")
             // Non-fatal — session works fine without Live Activity
@@ -690,8 +716,17 @@ final class BackgroundDictationService: ObservableObject {
 
     private func endLiveActivity() {
         guard let activity = currentActivity else { return }
+        // Pass an EXPLICIT final ContentState. Calling activity.end(nil, ...)
+        // is the canonical "doesn't actually remove the card" bug — iOS keeps
+        // the lock screen card visible indefinitely when the final state is
+        // nil. Apple's sample code (Emoji Rangers) always passes an explicit
+        // ActivityContent for the same reason.
+        let finalState = StopTypingWidgetAttributes.ContentState(isRecording: false, mode: "Formal")
         Task {
-            await activity.end(nil, dismissalPolicy: .immediate)
+            await activity.end(
+                ActivityContent(state: finalState, staleDate: nil),
+                dismissalPolicy: .immediate
+            )
         }
         currentActivity = nil
         log("Live Activity ended")
