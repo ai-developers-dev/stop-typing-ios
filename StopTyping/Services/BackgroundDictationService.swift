@@ -48,9 +48,14 @@ final class BackgroundDictationService: ObservableObject {
 
         log("Activating session...")
 
-        // Mark session active immediately so UI updates instantly
+        // Mark session active AND write bootId synchronously, so even if the user
+        // immediately backgrounds the app (before the async audio setup finishes),
+        // the keyboard still sees a consistent state: sessionActive=true +
+        // bootId=current. Without this, a fast-background left bootId=nil and the
+        // keyboard incorrectly showed "Start ST" on return.
         defaults.writeHeartbeat()
         defaults.sessionActive = true
+        defaults.bootId = SharedDefaults.currentBootID()
         defaults.audioLevel = 0
         DispatchQueue.main.async { self.isSessionActive = true }
 
@@ -144,14 +149,10 @@ final class BackgroundDictationService: ObservableObject {
             timer.resume()
             self.heartbeatTimer = timer
 
-            // Reboot detection: store the current boot ID so the keyboard can
-            // distinguish "session still alive across sleep" from "phone rebooted".
-            // iOS doesn't allow apps to auto-launch after reboot, so without this
-            // the keyboard would see a stale sessionActive=true and send Darwin
-            // notifications into the void.
-            self.defaults.bootId = SharedDefaults.currentBootID()
+            // bootId is already written synchronously at the top of activateSession()
+            // so we don't need to write it again here.
 
-            self.log("✅ Session ACTIVE (bootId written)")
+            self.log("✅ Session ACTIVE")
 
             // Fix 3.3: Clear any prior activation error — activation succeeded
             await MainActor.run { self.activationError = nil }
@@ -290,6 +291,9 @@ final class BackgroundDictationService: ObservableObject {
 
             self.startIdleAudioEngine()
             self.defaults.writeHeartbeat()
+            // Refresh bootId on every successful recovery — safety net in case
+            // the initial activation's synchronous bootId write got wiped somehow.
+            self.defaults.bootId = SharedDefaults.currentBootID()
         }
     }
 
@@ -480,11 +484,16 @@ final class BackgroundDictationService: ObservableObject {
 
         log("Starting recording...")
 
-        // Reactivate audio session — cheap if already active
-        do {
-            try AVAudioSession.sharedInstance().setActive(true)
-        } catch {
-            log("⚠️ Re-activate audio session failed: \(error.localizedDescription) — continuing anyway")
+        // Full audio session setup with retry. This is cheap if the category
+        // and active state are already correct, but it also recovers from the
+        // case where the user backgrounded the app mid-activation — the initial
+        // setup Task may never have completed, so we can't assume the audio
+        // session is properly configured.
+        let audioReady = await setupAudioSessionWithRetry(attempts: 3, backoffMs: 200)
+        guard audioReady else {
+            log("❌ Audio session not ready for recording")
+            emitRecordingFailed()
+            return
         }
 
         // Fix 2.5: Cancel any leftover recognition task from a previous recording.
