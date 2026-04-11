@@ -144,7 +144,14 @@ final class BackgroundDictationService: ObservableObject {
             timer.resume()
             self.heartbeatTimer = timer
 
-            self.log("✅ Session ACTIVE")
+            // Reboot detection: store the current boot ID so the keyboard can
+            // distinguish "session still alive across sleep" from "phone rebooted".
+            // iOS doesn't allow apps to auto-launch after reboot, so without this
+            // the keyboard would see a stale sessionActive=true and send Darwin
+            // notifications into the void.
+            self.defaults.bootId = SharedDefaults.currentBootID()
+
+            self.log("✅ Session ACTIVE (bootId written)")
 
             // Fix 3.3: Clear any prior activation error — activation succeeded
             await MainActor.run { self.activationError = nil }

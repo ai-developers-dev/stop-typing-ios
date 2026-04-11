@@ -61,6 +61,36 @@ final class SharedDefaults {
         set { defaults.set(newValue, forKey: AppGroupConfig.sessionActiveKey) }
     }
 
+    // MARK: - Boot ID (reboot detection)
+    //
+    // Written by the main app on successful activation. Read by the keyboard
+    // extension to decide whether a persisted sessionActive=true is actually
+    // still valid (same boot) or stale (phone rebooted, app is dead).
+    //
+    // iOS does not allow apps to auto-launch after reboot, so the only way
+    // to detect a reboot from the keyboard's perspective is by comparing
+    // the stored bootId against the current one.
+
+    var bootId: Date? {
+        get { defaults.object(forKey: AppGroupConfig.bootIdKey) as? Date }
+        set { defaults.set(newValue, forKey: AppGroupConfig.bootIdKey) }
+    }
+
+    /// Estimated wall-clock time of the current system boot.
+    /// Computed as `now - systemUptime`. Stable across the same boot with ~1s
+    /// drift, so comparisons should use a tolerance (we use 5 seconds).
+    static func currentBootID() -> Date {
+        return Date(timeIntervalSinceNow: -ProcessInfo.processInfo.systemUptime)
+    }
+
+    /// True when the stored bootId matches the current boot (within 5s tolerance).
+    /// Returns false when: no stored bootId, OR phone has rebooted since activation.
+    func isCurrentBoot() -> Bool {
+        guard let stored = bootId else { return false }
+        let current = Self.currentBootID()
+        return abs(stored.timeIntervalSince(current)) < 5.0
+    }
+
     /// Returns true if the main app heartbeat is recent (within 10 seconds).
     func isAppAlive() -> Bool {
         guard let beat = defaults.object(forKey: AppGroupConfig.heartbeatKey) as? Date else { return false }
@@ -90,6 +120,7 @@ final class SharedDefaults {
         isRecording = false
         sessionActive = false
         audioLevel = 0
+        bootId = nil
     }
 
     // MARK: - Debug Log (persists to App Group so both app and keyboard can read)

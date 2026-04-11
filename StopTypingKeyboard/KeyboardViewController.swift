@@ -35,10 +35,13 @@ class KeyboardViewController: UIInputViewController {
         view.backgroundColor = .systemGray6
         inputView?.backgroundColor = .systemGray6
 
-        // Use sessionActive boolean — this persists even when app is backgrounded
+        // Check sessionActive, but only trust it if the stored bootId matches
+        // the current boot. After a reboot, sessionActive is stale (persisted
+        // on disk) but the app is definitely not running, so we must show
+        // "Start ST" instead of the active toolbar.
         let defaults = SharedDefaults.shared
-        isAppAlive = defaults.sessionActive
-        isRecording = defaults.isRecording
+        isAppAlive = defaults.sessionActive && defaults.isCurrentBoot()
+        isRecording = defaults.isRecording && isAppAlive
 
         setupKeyboardView()
         registerDarwinObservers()
@@ -154,11 +157,14 @@ class KeyboardViewController: UIInputViewController {
         let wasRecording = isRecording
         let defaults = SharedDefaults.shared
 
-        // Trust sessionActive — it stays true across app backgrounding and sleep.
-        // The app uses UIApplication.willTerminateNotification to clear it on termination,
-        // and handles AVAudioSession interruptions to self-heal after system suspension.
-        isAppAlive = defaults.sessionActive
-        isRecording = defaults.isRecording
+        // Trust sessionActive across sleep/backgrounding (v1 win) BUT only if
+        // the stored bootId matches the current boot. After a reboot, the app
+        // is guaranteed to NOT be running (iOS doesn't allow auto-launch), so
+        // even though sessionActive is still true on disk, we must show
+        // "Start ST" to prompt the user to relaunch the app.
+        let bootMatches = defaults.isCurrentBoot()
+        isAppAlive = defaults.sessionActive && bootMatches
+        isRecording = isAppAlive ? defaults.isRecording : false
 
         if isAppAlive != wasAlive || isRecording != wasRecording {
             rebuildView()
