@@ -12,6 +12,9 @@ final class BackgroundDictationService: ObservableObject {
     @Published var isCurrentlyRecording = false
     @Published var lastTranscript = ""
     @Published var debugLog = ""
+    /// Fix 3.3: Non-nil when activation failed. DictationOverlayView shows
+    /// a Retry button when this is set. Cleared on successful activation.
+    @Published var activationError: String? = nil
 
     private var heartbeatTimer: DispatchSourceTimer?
     private var audioEngine: AVAudioEngine?
@@ -118,9 +121,17 @@ final class BackgroundDictationService: ObservableObject {
 
             guard audioSetupSucceeded else {
                 self.log("❌ Audio session setup FAILED after retries")
+                // Fix 3.3: Surface the error to the UI so user can retry
+                let errorMsg: String
+                if speechStatus != .authorized {
+                    errorMsg = "Microphone or speech permission is required. Open Settings and enable them, then tap Retry."
+                } else {
+                    errorMsg = "Couldn't start microphone. Tap Retry."
+                }
                 await MainActor.run {
                     self.defaults.clearSession()
                     self.isSessionActive = false
+                    self.activationError = errorMsg
                 }
                 return
             }
@@ -135,9 +146,63 @@ final class BackgroundDictationService: ObservableObject {
 
             self.log("✅ Session ACTIVE")
 
+            // Fix 3.3: Clear any prior activation error — activation succeeded
+            await MainActor.run { self.activationError = nil }
+
             // Start Live Activity for Dynamic Island
             self.startLiveActivity()
         }
+    }
+
+    // MARK: - Retry Activation (Fix 3.3)
+    //
+    // User-facing retry path when activation fails. Clears error state, resets
+    // in-memory flags, and re-runs activateSession. Safe to call from main thread.
+
+    func retryActivation() {
+        log("🔄 Retry activation requested")
+        DispatchQueue.main.async {
+            self.activationError = nil
+            self.isSessionActive = false
+        }
+        defaults.sessionActive = false
+        // Tiny delay to let the @Published updates propagate before re-entering activate
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.activateSession()
+        }
+    }
+
+    // MARK: - Cold-Start Warmup (Fix 3.2)
+    //
+    // Fired once on first scene .active. Pre-touches expensive system APIs so
+    // the user's first activation tap doesn't pay cold-start cost. This is
+    // READ-ONLY — it never requests permissions or starts the engine, so it has
+    // no side effects on the user.
+
+    func warmUpColdStart() async {
+        // If real activation already ran, skip (no cost, but log confirms)
+        guard !isSessionActive else {
+            log("🔥 Warmup skipped — session already active")
+            return
+        }
+
+        log("🔥 Warming up cold-start services...")
+
+        // 1. Touch SharedDefaults keys — pulls App Group container into memory
+        _ = defaults.sessionActive
+        _ = defaults.isRecording
+        _ = defaults.heartbeat
+
+        // 2. Touch AVAudioSession singleton — wakes the AV daemon without
+        //    changing category or activating. Safe, no side effects.
+        _ = AVAudioSession.sharedInstance().currentRoute
+
+        // 3. Touch SFSpeechRecognizer — initializes the Speech framework
+        _ = speechRecognizer?.isAvailable
+
+        // 4. Read current speech authorization status (does NOT prompt)
+        let status = SFSpeechRecognizer.authorizationStatus()
+        log("🔥 Warmup complete (speech auth status: \(status.rawValue))")
     }
 
     /// Fix 2.2: Tries to configure + activate the AVAudioSession, retrying on failure.

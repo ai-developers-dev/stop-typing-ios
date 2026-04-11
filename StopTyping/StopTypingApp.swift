@@ -5,6 +5,7 @@ struct StopTypingApp: App {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @State private var showDictationActivation = false
     @State private var overlayRefreshToken = UUID()
+    @State private var didWarmUp = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
@@ -40,6 +41,14 @@ struct StopTypingApp: App {
                     service.handleBackground()
                 case .active:
                     service.handleForeground()
+                    // Fix 3.2: Cold-start warmup on first .active. Pre-touches system
+                    // APIs so the user's first activation tap is instant.
+                    if !didWarmUp {
+                        didWarmUp = true
+                        Task.detached(priority: .utility) {
+                            await BackgroundDictationService.shared.warmUpColdStart()
+                        }
+                    }
                     // Refresh the overlay so it doesn't show stale content after a return
                     if showDictationActivation {
                         overlayRefreshToken = UUID()
