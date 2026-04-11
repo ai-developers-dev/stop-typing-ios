@@ -231,28 +231,49 @@ final class BackgroundDictationService: ObservableObject {
 
     /// Fix 2.2: Tries to configure + activate the AVAudioSession, retrying on failure.
     /// Returns true on success, false if all attempts failed.
+    ///
+    /// Uses the Apple Speech framework recommended config:
+    ///   .playAndRecord + .measurement + .duckOthers + .defaultToSpeaker
+    /// On failure, falls back to the simpler .record + .measurement pattern
+    /// that matches Apple's SFSpeechRecognizer sample code.
     private func setupAudioSessionWithRetry(attempts: Int, backoffMs: Int) async -> Bool {
-        // Log mic permission state once up front — useful for diagnosing
-        // "everything looks fine but setActive fails" issues.
-        let micPermission = AVAudioApplication.shared.recordPermission
-        log("    audio setup: mic permission = \(micPermission.rawValue == 1 ? "granted" : micPermission.rawValue == 2 ? "denied" : "undetermined")")
+        log("    audio setup: mic permission = \(micPermissionDescription(AVAudioApplication.shared.recordPermission))")
 
+        let session = AVAudioSession.sharedInstance()
+
+        // Primary config: playAndRecord (needed so the idle engine keeps the session
+        // alive during backgrounding) with a simpler options set. We dropped
+        // .mixWithOthers and .allowBluetooth which were sometimes causing setActive
+        // to fail on fresh install.
         for attempt in 1...attempts {
             do {
-                let session = AVAudioSession.sharedInstance()
                 try session.setCategory(.playAndRecord, mode: .measurement,
-                                        options: [.mixWithOthers, .defaultToSpeaker, .allowBluetooth])
+                                        options: [.duckOthers, .defaultToSpeaker])
                 try session.setActive(true, options: .notifyOthersOnDeactivation)
-                log("    audio setup attempt \(attempt)/\(attempts): ✓ active")
+                log("    audio setup attempt \(attempt)/\(attempts): ✓ (primary config)")
                 return true
             } catch {
-                log("    audio setup attempt \(attempt)/\(attempts): ✗ \((error as NSError).code) — \(error.localizedDescription)")
+                let nsErr = error as NSError
+                log("    audio setup attempt \(attempt)/\(attempts): ✗ code=\(nsErr.code) — \(error.localizedDescription)")
                 if attempt < attempts {
                     try? await Task.sleep(nanoseconds: UInt64(backoffMs) * 1_000_000)
                 }
             }
         }
-        return false
+
+        // Fallback: try the minimal .record config that Apple's Speech sample uses.
+        // If this succeeds, the idle engine won't stay alive during backgrounding,
+        // but at least recording will work for the current session.
+        log("    audio setup: trying fallback .record config")
+        do {
+            try session.setCategory(.record, mode: .measurement, options: .duckOthers)
+            try session.setActive(true, options: .notifyOthersOnDeactivation)
+            log("    audio setup fallback: ✓ (.record config)")
+            return true
+        } catch {
+            log("    audio setup fallback FAILED: \((error as NSError).code) — \(error.localizedDescription)")
+            return false
+        }
     }
 
     // MARK: - Audio Interruption Handling
@@ -296,20 +317,14 @@ final class BackgroundDictationService: ObservableObject {
             return
         }
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
-
-            do {
-                let session = AVAudioSession.sharedInstance()
-                try session.setCategory(.playAndRecord, mode: .measurement,
-                                        options: [.mixWithOthers, .defaultToSpeaker, .allowBluetooth])
-                try session.setActive(true, options: .notifyOthersOnDeactivation)
-                self.log("Audio session reactivated")
-            } catch {
-                self.log("Audio session reactivate FAILED: \(error)")
+            // Use the shared retry helper so all paths use the same config
+            let ok = await self.setupAudioSessionWithRetry(attempts: 2, backoffMs: 200)
+            guard ok else {
+                self.log("reactivateAudioPipeline: audio session setup failed")
                 return
             }
-
             self.startIdleAudioEngine()
             self.defaults.writeHeartbeat()
             // Refresh bootId on every successful recovery — safety net in case
@@ -489,11 +504,38 @@ final class BackgroundDictationService: ObservableObject {
 
         guard isSessionActive else {
             log("❌ BLOCK: isSessionActive=false — session not active (in-memory flag never got set)")
+            await setActivationError("Session not active. Open the app and tap Retry.")
             emitRecordingFailed()
             return
         }
         guard !isCurrentlyRecording else {
             log("⚠️ BLOCK: isCurrentlyRecording=true — already recording, ignoring (no ACK)")
+            return
+        }
+
+        // FAST-FAIL permission checks — bail immediately with a clear error
+        // instead of wasting seconds on retries that can never succeed.
+        let micPermission = AVAudioApplication.shared.recordPermission
+        log("  pre-check: mic permission = \(micPermissionDescription(micPermission))")
+        if micPermission != .granted {
+            log("❌ BLOCK: mic permission not granted (\(micPermissionDescription(micPermission)))")
+            let msg = micPermission == .denied
+                ? "Microphone access was denied. Open Settings → Privacy → Microphone → Stop Typing and enable it."
+                : "Microphone permission is required. Open the app and grant mic access."
+            await setActivationError(msg)
+            emitRecordingFailed()
+            return
+        }
+
+        let speechAuth = SFSpeechRecognizer.authorizationStatus()
+        log("  pre-check: speech auth = \(speechAuthDescription(speechAuth))")
+        if speechAuth != .authorized {
+            log("❌ BLOCK: speech recognition not authorized (\(speechAuthDescription(speechAuth)))")
+            let msg = speechAuth == .denied
+                ? "Speech recognition was denied. Open Settings → Privacy → Speech Recognition → Stop Typing and enable it."
+                : "Speech recognition permission is required. Open the app and grant access."
+            await setActivationError(msg)
+            emitRecordingFailed()
             return
         }
 
@@ -506,6 +548,7 @@ final class BackgroundDictationService: ObservableObject {
             log("  ✓ step 1 done: speech recognizer ready")
         } else {
             log("❌ BLOCK: speech recognizer never became available within 2s — aborting")
+            await setActivationError("Speech recognizer unavailable. Try restarting the app.")
             emitRecordingFailed()
             return
         }
@@ -515,6 +558,7 @@ final class BackgroundDictationService: ObservableObject {
         let audioReady = await setupAudioSessionWithRetry(attempts: 3, backoffMs: 200)
         guard audioReady else {
             log("❌ BLOCK: audio session not ready after 3 retries")
+            await setActivationError("Couldn't configure the microphone. Tap Retry.")
             emitRecordingFailed()
             return
         }
@@ -620,6 +664,32 @@ final class BackgroundDictationService: ObservableObject {
         defaults.isRecording = false
         defaults.audioLevel = 0
         darwin.post(DarwinNotificationName.recordingFailed)
+    }
+
+    /// Surface a recording-time error to the UI so the user can see what happened
+    /// when they next open the app. Clears on successful activation/recording.
+    @MainActor
+    private func setActivationError(_ message: String) {
+        self.activationError = message
+    }
+
+    private func micPermissionDescription(_ status: AVAudioApplication.recordPermission) -> String {
+        switch status {
+        case .granted: return "granted"
+        case .denied: return "denied"
+        case .undetermined: return "undetermined"
+        @unknown default: return "unknown(\(status.rawValue))"
+        }
+    }
+
+    private func speechAuthDescription(_ status: SFSpeechRecognizerAuthorizationStatus) -> String {
+        switch status {
+        case .authorized: return "authorized"
+        case .denied: return "denied"
+        case .restricted: return "restricted"
+        case .notDetermined: return "notDetermined"
+        @unknown default: return "unknown"
+        }
     }
 
     // MARK: - Audio Level Metering
