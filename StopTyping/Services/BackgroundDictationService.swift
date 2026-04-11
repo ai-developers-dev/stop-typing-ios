@@ -37,6 +37,14 @@ final class BackgroundDictationService: ObservableObject {
     private var lastReactivation: Date = .distantPast
     private let reactivationDebounceSeconds: TimeInterval = 1.5
 
+    // Diagnostic counters for the current recording session. Reset in
+    // startRecordingAsync, logged in stopRecording. Tell us whether the tap
+    // callback is firing, whether the recognition task is emitting partial
+    // results, and the current state when the user hit stop.
+    private var currentTapBufferCount: Int = 0
+    private var currentPartialResultCount: Int = 0
+    private var currentRecordingStartTime: Date = .distantPast
+
     private init() {}
 
     private func log(_ msg: String) {
@@ -622,6 +630,9 @@ final class BackgroundDictationService: ObservableObject {
         recognitionRequest = nil
 
         currentTranscript = ""
+        currentTapBufferCount = 0
+        currentPartialResultCount = 0
+        currentRecordingStartTime = Date()
         defaults.isRecording = true
         defaults.audioLevel = 0
         previousAudioLevel = 0
@@ -649,6 +660,12 @@ final class BackgroundDictationService: ObservableObject {
             guard let self else { return }
             if let result {
                 self.currentTranscript = result.bestTranscription.formattedString
+                self.currentPartialResultCount += 1
+                // Log first partial to prove the recognizer is actually receiving audio
+                if self.currentPartialResultCount == 1 {
+                    let elapsed = Date().timeIntervalSince(self.currentRecordingStartTime)
+                    self.log("  🗣️ first partial result after \(String(format: "%.2f", elapsed))s: '\(self.currentTranscript.prefix(40))'")
+                }
                 if result.isFinal {
                     self.log("ASR final result: '\(self.currentTranscript.prefix(60))'")
                 }
@@ -663,15 +680,28 @@ final class BackgroundDictationService: ObservableObject {
         let format = inputNode.outputFormat(forBus: 0)
 
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
-            self?.recognitionRequest?.append(buffer)
-            self?.updateAudioLevel(buffer: buffer)
+            guard let self else { return }
+            self.recognitionRequest?.append(buffer)
+            self.updateAudioLevel(buffer: buffer)
+            self.currentTapBufferCount += 1
+            // Log first buffer arrival — proves the engine actually started capturing
+            if self.currentTapBufferCount == 1 {
+                let elapsed = Date().timeIntervalSince(self.currentRecordingStartTime)
+                self.log("  🎤 first audio buffer after \(String(format: "%.2f", elapsed))s")
+            }
         }
 
         engine.prepare()
         log("  step 7: engine.start()...")
         do {
             try engine.start()
-            log("✅ RECORDING STARTED — engine running, posting recordingStarted ACK")
+            // Post the ACK IMMEDIATELY so the keyboard UI locks in the recording
+            // toolbar. The audio engine takes ~50-150ms to start emitting buffers,
+            // but the recognition task is already attached and will receive them
+            // as soon as they arrive. The user's first word may be slightly
+            // clipped but won't be lost entirely because the input tap queues
+            // buffers as soon as the engine is running.
+            log("✅ RECORDING STARTED — engine.isRunning=\(engine.isRunning), posting recordingStarted ACK")
             updateLiveActivity(isRecording: true)
             darwin.post(DarwinNotificationName.recordingStarted)
         } catch {
@@ -771,7 +801,8 @@ final class BackgroundDictationService: ObservableObject {
             return
         }
 
-        log("Stopping recording (save)...")
+        let elapsed = Date().timeIntervalSince(currentRecordingStartTime)
+        log("⏹ Stopping recording after \(String(format: "%.2f", elapsed))s (bufferCount=\(currentTapBufferCount) partials=\(currentPartialResultCount) currentTranscript='\(currentTranscript.prefix(40))')")
         stopEngine()
         recognitionRequest?.endAudio()
 
