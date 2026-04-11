@@ -7,6 +7,14 @@ enum DarwinNotificationName {
     static let stopDictation = "com.stormacq.StopTypingiOS.stopDictation"
     static let cancelDictation = "com.stormacq.StopTypingiOS.cancelDictation"
     static let transcriptReady = "com.stormacq.StopTypingiOS.transcriptReady"
+
+    /// ACK from main app to keyboard: recording successfully started.
+    /// Keyboard uses this to confirm its local state matches reality.
+    static let recordingStarted = "com.stormacq.StopTypingiOS.recordingStarted"
+
+    /// ACK from main app to keyboard: recording failed to start (permission, engine, etc).
+    /// Keyboard uses this to reset its local UI back to the mic button.
+    static let recordingFailed = "com.stormacq.StopTypingiOS.recordingFailed"
 }
 
 // MARK: - Darwin Notification Center

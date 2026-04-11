@@ -89,23 +89,36 @@ final class BackgroundDictationService: ObservableObject {
             self?.reactivateAudioPipeline()
         }
 
-        // Heavy audio work OFF the main thread — this is what was blocking the UI
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        // Heavy audio work OFF the main thread — this is what was blocking the UI.
+        // Uses an async Task so we can await the speech authorization result properly
+        // (Fix 2.1) instead of fire-and-forget.
+        Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
 
-            SFSpeechRecognizer.requestAuthorization { [weak self] status in
-                DispatchQueue.main.async { self?.log("Speech auth: \(status.rawValue)") }
+            // Fix 2.1: Await speech recognition permission before activating the audio pipeline.
+            // On fresh install this was a race — we'd try to start the engine before the user
+            // had granted permission, resulting in a "works but doesn't work" state.
+            let speechStatus = await withCheckedContinuation { (cont: CheckedContinuation<SFSpeechRecognizerAuthorizationStatus, Never>) in
+                SFSpeechRecognizer.requestAuthorization { status in
+                    cont.resume(returning: status)
+                }
+            }
+            self.log("Speech auth result: \(speechStatus.rawValue)")
+
+            if speechStatus != .authorized {
+                self.log("⚠️ Speech not authorized — activation will still set up audio, but startRecording will fail until user grants permission")
+                // Don't clear the session — user might grant permission later in Settings.
+                // startRecording's guards will handle it and emit recordingFailed.
             }
 
-            do {
-                let session = AVAudioSession.sharedInstance()
-                try session.setCategory(.playAndRecord, mode: .measurement,
-                                        options: [.mixWithOthers, .defaultToSpeaker, .allowBluetooth])
-                try session.setActive(true, options: .notifyOthersOnDeactivation)
-                self.log("Audio session active")
-            } catch {
-                self.log("Audio session FAILED: \(error)")
-                DispatchQueue.main.async {
+            // Fix 2.2: Set up audio session with retry/backoff.
+            // On fresh install, the audio daemon can briefly reject setActive while
+            // permissions propagate. Retry up to 3 times with 300ms backoff.
+            let audioSetupSucceeded = await self.setupAudioSessionWithRetry(attempts: 3, backoffMs: 300)
+
+            guard audioSetupSucceeded else {
+                self.log("❌ Audio session setup FAILED after retries")
+                await MainActor.run {
                     self.defaults.clearSession()
                     self.isSessionActive = false
                 }
@@ -120,11 +133,32 @@ final class BackgroundDictationService: ObservableObject {
             timer.resume()
             self.heartbeatTimer = timer
 
-            self.log("Session ACTIVE")
+            self.log("✅ Session ACTIVE")
 
             // Start Live Activity for Dynamic Island
             self.startLiveActivity()
         }
+    }
+
+    /// Fix 2.2: Tries to configure + activate the AVAudioSession, retrying on failure.
+    /// Returns true on success, false if all attempts failed.
+    private func setupAudioSessionWithRetry(attempts: Int, backoffMs: Int) async -> Bool {
+        for attempt in 1...attempts {
+            do {
+                let session = AVAudioSession.sharedInstance()
+                try session.setCategory(.playAndRecord, mode: .measurement,
+                                        options: [.mixWithOthers, .defaultToSpeaker, .allowBluetooth])
+                try session.setActive(true, options: .notifyOthersOnDeactivation)
+                log("Audio session active (attempt \(attempt)/\(attempts))")
+                return true
+            } catch {
+                log("Audio session setup attempt \(attempt)/\(attempts) failed: \(error.localizedDescription)")
+                if attempt < attempts {
+                    try? await Task.sleep(nanoseconds: UInt64(backoffMs) * 1_000_000)
+                }
+            }
+        }
+        return false
     }
 
     // MARK: - Audio Interruption Handling
@@ -338,27 +372,61 @@ final class BackgroundDictationService: ObservableObject {
     }
 
     // MARK: - Start Recording
+    //
+    // Darwin observer entry point. Kicks off the async recording path and returns
+    // immediately so we don't block the notification delivery thread.
 
     private func startRecording() {
-        guard isSessionActive, !isCurrentlyRecording else { return }
-        guard let speechRecognizer, speechRecognizer.isAvailable else {
-            log("Speech recognizer unavailable")
+        Task.detached(priority: .userInitiated) { [weak self] in
+            await self?.startRecordingAsync()
+        }
+    }
+
+    /// Fix 2.3 + 2.4 + 2.5: robust startRecording with retry, ACK, and task cleanup.
+    private func startRecordingAsync() async {
+        guard isSessionActive else {
+            log("❌ startRecording blocked: session not active")
+            emitRecordingFailed()
+            return
+        }
+        guard !isCurrentlyRecording else {
+            log("⚠️ startRecording called but already recording — ignoring")
+            // Don't emit failed — we're in a valid state, the keyboard's UI is correct
+            return
+        }
+
+        // Fix 2.3: Wait for speechRecognizer to be ready. On fresh install the recognizer
+        // may briefly be nil or unavailable while Speech framework warms up.
+        let recognizer: SFSpeechRecognizer
+        if let ready = await waitForSpeechRecognizerReady(timeoutMs: 2000) {
+            recognizer = ready
+        } else {
+            log("❌ Speech recognizer never became available — aborting")
+            emitRecordingFailed()
             return
         }
 
         log("Starting recording...")
 
+        // Reactivate audio session — cheap if already active
         do {
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
-            log("Re-activate failed: \(error)")
+            log("⚠️ Re-activate audio session failed: \(error.localizedDescription) — continuing anyway")
         }
+
+        // Fix 2.5: Cancel any leftover recognition task from a previous recording.
+        // Without this, the Speech framework can hang onto a stale task and silently
+        // reject the new one.
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        recognitionRequest = nil
 
         currentTranscript = ""
         defaults.isRecording = true
         defaults.audioLevel = 0
         previousAudioLevel = 0
-        DispatchQueue.main.async { self.isCurrentlyRecording = true }
+        await MainActor.run { self.isCurrentlyRecording = true }
 
         // Stop idle engine
         if let engine = audioEngine, engine.isRunning {
@@ -369,14 +437,14 @@ final class BackgroundDictationService: ObservableObject {
         let engine = AVAudioEngine()
         self.audioEngine = engine
 
-        recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
-        guard let recognitionRequest else { return }
-        recognitionRequest.shouldReportPartialResults = true
-        if speechRecognizer.supportsOnDeviceRecognition {
-            recognitionRequest.requiresOnDeviceRecognition = true
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
+        if recognizer.supportsOnDeviceRecognition {
+            request.requiresOnDeviceRecognition = true
         }
+        recognitionRequest = request
 
-        recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
+        recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
             guard let self else { return }
             if let result {
                 self.currentTranscript = result.bestTranscription.formattedString
@@ -400,14 +468,51 @@ final class BackgroundDictationService: ObservableObject {
         engine.prepare()
         do {
             try engine.start()
-            log("Recording engine STARTED")
+            log("✅ Recording engine STARTED")
             updateLiveActivity(isRecording: true)
+            // Fix 2.4: Tell the keyboard recording actually started successfully
+            darwin.post(DarwinNotificationName.recordingStarted)
         } catch {
-            log("Recording engine FAILED: \(error)")
+            log("❌ Recording engine FAILED: \(error.localizedDescription)")
             defaults.isRecording = false
-            DispatchQueue.main.async { self.isCurrentlyRecording = false }
+            await MainActor.run { self.isCurrentlyRecording = false }
+            recognitionTask?.cancel()
+            recognitionTask = nil
+            recognitionRequest = nil
             startIdleAudioEngine()
+            emitRecordingFailed()
         }
+    }
+
+    /// Fix 2.3: Poll for speechRecognizer availability. Returns the recognizer if it
+    /// becomes ready within the timeout, nil otherwise.
+    private func waitForSpeechRecognizerReady(timeoutMs: Int) async -> SFSpeechRecognizer? {
+        // Quick path — already ready
+        if let r = speechRecognizer, r.isAvailable {
+            return r
+        }
+
+        log("Speech recognizer not ready — waiting up to \(timeoutMs)ms")
+        let pollIntervalMs = 100
+        let maxPolls = timeoutMs / pollIntervalMs
+
+        for _ in 0..<maxPolls {
+            try? await Task.sleep(nanoseconds: UInt64(pollIntervalMs) * 1_000_000)
+            if let r = speechRecognizer, r.isAvailable {
+                log("Speech recognizer became ready")
+                return r
+            }
+        }
+
+        return nil
+    }
+
+    /// Fix 2.4: Emit the recordingFailed ACK so the keyboard can reset its local UI.
+    /// Also clears defaults.isRecording so polling observers see the correct state.
+    private func emitRecordingFailed() {
+        defaults.isRecording = false
+        defaults.audioLevel = 0
+        darwin.post(DarwinNotificationName.recordingFailed)
     }
 
     // MARK: - Audio Level Metering

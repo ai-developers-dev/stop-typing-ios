@@ -129,6 +129,22 @@ class KeyboardViewController: UIInputViewController {
         darwin.observe(DarwinNotificationName.transcriptReady) { [weak self] in
             self?.onTranscriptReady()
         }
+        // Fix 2.4: ACK from main app that recording actually started.
+        // Confirms local state is correct — nothing to do but log.
+        darwin.observe(DarwinNotificationName.recordingStarted) { [weak self] in
+            self?.klog("✅ recordingStarted ACK received")
+        }
+        // Fix 2.4: ACK from main app that recording failed to start.
+        // Reset local UI back to the mic button so the user can try again.
+        darwin.observe(DarwinNotificationName.recordingFailed) { [weak self] in
+            self?.onRecordingFailed()
+        }
+    }
+
+    private func onRecordingFailed() {
+        klog("❌ recordingFailed ACK received — resetting UI")
+        isRecording = false
+        rebuildView()
     }
 
     // MARK: - State Management
