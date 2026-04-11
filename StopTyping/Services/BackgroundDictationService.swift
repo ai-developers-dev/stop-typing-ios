@@ -26,6 +26,11 @@ final class BackgroundDictationService: ObservableObject {
     private let darwin = DarwinNotificationCenter.shared
     private var previousAudioLevel: Float = 0
     private var currentActivity: Activity<StopTypingWidgetAttributes>?
+    /// True after a successful foreground setCategory + setActive. iOS disallows
+    /// setActive(true) from background when another app (Messages, etc.) holds
+    /// audio priority, so we skip that call in startRecordingAsync when this is
+    /// already true — the session is still configured from the foreground setup.
+    private var audioSessionConfigured = false
 
     private init() {}
 
@@ -273,6 +278,7 @@ final class BackgroundDictationService: ObservableObject {
                     try session.setCategory(category, mode: mode, options: categoryOptions)
                     try session.setActive(true, options: activeOptions)
                     log("    audio setup attempt \(attempt): ✓ \(configName)")
+                    audioSessionConfigured = true
                     return true
                 } catch {
                     let nsErr = error as NSError
@@ -497,6 +503,7 @@ final class BackgroundDictationService: ObservableObject {
         darwin.removeAllObservers()
         defaults.clearSession()
         isSessionActive = false
+        audioSessionConfigured = false
         try? AVAudioSession.sharedInstance().setActive(false)
     }
 
@@ -566,16 +573,25 @@ final class BackgroundDictationService: ObservableObject {
             return
         }
 
-        // Full audio session setup with retry.
-        log("  step 2: setting up audio session (retry x3)...")
-        let audioReady = await setupAudioSessionWithRetry(attempts: 3, backoffMs: 200)
-        guard audioReady else {
-            log("❌ BLOCK: audio session not ready after 3 retries")
-            await setActivationError("Couldn't configure the microphone. Tap Retry.")
-            emitRecordingFailed()
-            return
+        // Audio session setup. If we already configured the session during
+        // foreground activation, SKIP setCategory/setActive — iOS rejects those
+        // calls from background with cannotInterruptOthers (error 560557684)
+        // when another app (Messages, etc.) holds audio priority. The session
+        // is still active from our foreground activation because the idle audio
+        // engine keeps it alive under UIBackgroundModes=audio.
+        if audioSessionConfigured {
+            log("  step 2: audio session already configured from foreground — skipping setCategory/setActive")
+        } else {
+            log("  step 2: setting up audio session for the first time (retry x3)...")
+            let audioReady = await setupAudioSessionWithRetry(attempts: 3, backoffMs: 200)
+            guard audioReady else {
+                log("❌ BLOCK: audio session not ready after 3 retries")
+                await setActivationError("Couldn't configure the microphone. Tap Retry.")
+                emitRecordingFailed()
+                return
+            }
+            log("  ✓ step 2 done: audio session ready")
         }
-        log("  ✓ step 2 done: audio session ready")
 
         log("  step 3: cancelling prior recognition task + resetting state")
         // Fix 2.5: Cancel any leftover recognition task from a previous recording.
