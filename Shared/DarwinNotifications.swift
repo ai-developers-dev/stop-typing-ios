@@ -43,7 +43,21 @@ final class DarwinNotificationCenter {
 
     /// Observe a Darwin notification (cross-process).
     /// The callback fires on the main thread.
+    /// Idempotent: calling this twice with the same name replaces the old
+    /// observer instead of adding a second one (which would cause duplicate
+    /// callbacks — CFNotificationCenter tracks observers by pointer+name and
+    /// AddObserver does NOT dedupe).
     func observe(_ name: String, callback: @escaping () -> Void) {
+        // Remove any prior observer for this name first — prevents duplicate
+        // deliveries when the same singleton registers multiple times (e.g.
+        // keyboard viewWillAppear cycling, or extension re-instantiation).
+        CFNotificationCenterRemoveObserver(
+            center,
+            Unmanaged.passUnretained(self).toOpaque(),
+            CFNotificationName(name as CFString),
+            nil
+        )
+
         callbacks[name] = callback
 
         CFNotificationCenterAddObserver(

@@ -31,6 +31,11 @@ final class BackgroundDictationService: ObservableObject {
     /// audio priority, so we skip that call in startRecordingAsync when this is
     /// already true — the session is still configured from the foreground setup.
     private var audioSessionConfigured = false
+    /// Debounce for reactivateAudioPipeline so handleForeground +
+    /// DictationOverlayView.onAppear don't both trigger full pipeline
+    /// restarts in parallel when the user returns to the app.
+    private var lastReactivation: Date = .distantPast
+    private let reactivationDebounceSeconds: TimeInterval = 1.5
 
     private init() {}
 
@@ -208,12 +213,24 @@ final class BackgroundDictationService: ObservableObject {
     // READ-ONLY — it never requests permissions or starts the engine, so it has
     // no side effects on the user.
 
+    /// Tracks whether warmUpColdStart has already run once this process lifetime.
+    /// Guards against repeated calls from scenePhase transitions during onboarding.
+    private var didWarmUpOnce = false
+
     func warmUpColdStart() async {
         // If real activation already ran, skip (no cost, but log confirms)
         guard !isSessionActive else {
             log("🔥 Warmup skipped — session already active")
             return
         }
+
+        // Only warm up once per process lifetime. Scene phase can cycle through
+        // active/inactive multiple times during onboarding (permission prompts)
+        // and we don't need to re-warm each time.
+        guard !didWarmUpOnce else {
+            return
+        }
+        didWarmUpOnce = true
 
         log("🔥 Warming up cold-start services...")
 
@@ -329,16 +346,23 @@ final class BackgroundDictationService: ObservableObject {
 
     /// Self-healing audio pipeline restart. Safe to call repeatedly.
     /// Reactivates AVAudioSession and restarts the idle engine from scratch.
+    /// Debounced so parallel callers (handleForeground + DictationOverlayView.onAppear)
+    /// don't double-run the audio config.
     private func reactivateAudioPipeline() {
-        // Don't interfere with active recording
         if isCurrentlyRecording {
             log("reactivateAudioPipeline: skipping (recording in progress)")
             return
         }
 
+        let now = Date()
+        if now.timeIntervalSince(lastReactivation) < reactivationDebounceSeconds {
+            log("reactivateAudioPipeline: debounced (last ran \(String(format: "%.1f", now.timeIntervalSince(lastReactivation)))s ago)")
+            return
+        }
+        lastReactivation = now
+
         Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
-            // Use the shared retry helper so all paths use the same config
             let ok = await self.setupAudioSessionWithRetry(attempts: 2, backoffMs: 200)
             guard ok else {
                 self.log("reactivateAudioPipeline: audio session setup failed")
@@ -346,8 +370,6 @@ final class BackgroundDictationService: ObservableObject {
             }
             self.startIdleAudioEngine()
             self.defaults.writeHeartbeat()
-            // Refresh bootId on every successful recovery — safety net in case
-            // the initial activation's synchronous bootId write got wiped somehow.
             self.defaults.bootId = SharedDefaults.currentBootID()
         }
     }
