@@ -48,12 +48,13 @@ class KeyboardViewController: UIInputViewController {
         view.backgroundColor = .systemGray6
         inputView?.backgroundColor = .systemGray6
 
-        // Check sessionActive, but only trust it if the stored bootId matches
-        // the current boot. After a reboot, sessionActive is stale (persisted
-        // on disk) but the app is definitely not running, so we must show
-        // "Start ST" instead of the active toolbar.
+        // Liveness is gated on the heartbeat, NOT on sessionActive. sessionActive
+        // is sticky — it stays true even when iOS suspends the main app — so
+        // relying on it made the keyboard lie: mic button shown, user taps, dead
+        // session. isAppAlive() checks whether the main app wrote a heartbeat
+        // within the last 10s. Boot-ID check guards against reboot staleness.
         let defaults = SharedDefaults.shared
-        isAppAlive = defaults.sessionActive && defaults.isCurrentBoot()
+        isAppAlive = defaults.isAppAlive() && defaults.isCurrentBoot()
         isRecording = defaults.isRecording && isAppAlive
 
         setupKeyboardView()
@@ -148,8 +149,13 @@ class KeyboardViewController: UIInputViewController {
     }
 
     private func onRecordingFailed() {
-        klog("❌ recordingFailed ACK received — resetting UI")
+        klog("❌ recordingFailed ACK received — resetting UI + marking app unavailable")
         isRecording = false
+        // Optimistically mark the app as unavailable so the toolbar flips to
+        // "Start ST" immediately instead of waiting for the 10s heartbeat
+        // staleness window. The next refreshState poll will re-confirm from
+        // the heartbeat; if the app is actually alive it'll flip back.
+        isAppAlive = false
         rebuildView()
     }
 
@@ -160,13 +166,12 @@ class KeyboardViewController: UIInputViewController {
         let wasRecording = isRecording
         let defaults = SharedDefaults.shared
 
-        // Trust sessionActive across sleep/backgrounding (v1 win) BUT only if
-        // the stored bootId matches the current boot. After a reboot, the app
-        // is guaranteed to NOT be running (iOS doesn't allow auto-launch), so
-        // even though sessionActive is still true on disk, we must show
-        // "Start ST" to prompt the user to relaunch the app.
+        // Heartbeat-based liveness: the main app writes a heartbeat every 2s
+        // while alive. When iOS suspends it, the writes stop and within ~10s
+        // isAppAlive() flips to false, cueing us to show "Start ST" instead
+        // of the mic button. Boot-ID check guards reboot staleness.
         let bootMatches = defaults.isCurrentBoot()
-        isAppAlive = defaults.sessionActive && bootMatches
+        isAppAlive = defaults.isAppAlive() && bootMatches
         isRecording = isAppAlive ? defaults.isRecording : false
 
         if isAppAlive != wasAlive || isRecording != wasRecording {
@@ -204,8 +209,16 @@ class KeyboardViewController: UIInputViewController {
             responder = r.next
         }
 
-        extensionContext?.open(url) { success in
+        extensionContext?.open(url) { [weak self] success in
             SharedDefaults.shared.appendLog("KBD: extensionContext result: \(success)")
+            if !success {
+                // iOS refused to open the URL. Best we can do is nudge the
+                // user — they'll need to tap the Stop Typing app icon
+                // manually. Insert a short, dismissable hint at the cursor.
+                DispatchQueue.main.async {
+                    self?.textDocumentProxy.insertText("[open Stop Typing app to continue] ")
+                }
+            }
         }
     }
 

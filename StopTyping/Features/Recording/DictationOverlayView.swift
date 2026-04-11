@@ -58,6 +58,12 @@ struct DictationOverlayView: View {
                 activationErrorCard(message: error)
             }
 
+            // Live status banner — tells the user whether the mic is being
+            // reconnected or is ready. The static mockup below was confusing
+            // without this ("is it done yet?"). Fires during the full
+            // rebuildAudioPipelineFromScratch path.
+            pipelineStatusBanner
+
             Spacer()
 
             // Heading
@@ -168,6 +174,47 @@ struct DictationOverlayView: View {
         .background(Color(UIColor.systemBackground))
         .onAppear {
             service.activateSession()
+        }
+    }
+
+    // MARK: - Pipeline Status Banner
+
+    @ViewBuilder
+    private var pipelineStatusBanner: some View {
+        switch service.pipelineStatus {
+        case .rebuilding:
+            HStack(spacing: 10) {
+                ProgressView()
+                    .scaleEffect(0.9)
+                Text("Reconnecting microphone…")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Color(UIColor.secondaryLabel))
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Color(UIColor.systemGray6))
+            .clipShape(Capsule())
+            .padding(.top, 8)
+            .transition(.opacity)
+
+        case .ready:
+            HStack(spacing: 10) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.green)
+                Text("Microphone ready — swipe back to your keyboard")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Color(UIColor.label))
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Color.green.opacity(0.12))
+            .clipShape(Capsule())
+            .padding(.top, 8)
+            .transition(.opacity)
+
+        case .idle:
+            EmptyView()
         }
     }
 

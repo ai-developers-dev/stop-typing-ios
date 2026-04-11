@@ -15,6 +15,16 @@ final class BackgroundDictationService: ObservableObject {
     /// Fix 3.3: Non-nil when activation failed. DictationOverlayView shows
     /// a Retry button when this is set. Cleared on successful activation.
     @Published var activationError: String? = nil
+    /// Pipeline reconnection status for the overlay banner. Flipped to
+    /// .rebuilding when rebuildAudioPipelineFromScratch starts, .ready when
+    /// it completes, .idle by default.
+    @Published var pipelineStatus: PipelineStatus = .idle
+
+    enum PipelineStatus: Equatable {
+        case idle
+        case rebuilding
+        case ready
+    }
 
     private var heartbeatTimer: DispatchSourceTimer?
     private var audioEngine: AVAudioEngine?
@@ -31,6 +41,12 @@ final class BackgroundDictationService: ObservableObject {
     /// audio priority, so we skip that call in startRecordingAsync when this is
     /// already true — the session is still configured from the foreground setup.
     private var audioSessionConfigured = false
+    /// Re-entry guard for rebuildAudioPipelineFromScratch. Multiple callers
+    /// (scenePhase.active → handleForeground, URL scheme → activateSession,
+    /// mediaServicesReset, etc.) can race into a rebuild simultaneously.
+    /// Without this guard, the second rebuild tears down the engine the
+    /// first one just built, leaving the pipeline half-broken.
+    private var rebuildInProgress = false
     /// Debounce for reactivateAudioPipeline so handleForeground +
     /// DictationOverlayView.onAppear don't both trigger full pipeline
     /// restarts in parallel when the user returns to the app.
@@ -58,10 +74,15 @@ final class BackgroundDictationService: ObservableObject {
     func activateSession() {
         log("🟢 activateSession() called — inMemory.isSessionActive=\(isSessionActive) defaults.sessionActive=\(defaults.sessionActive) defaults.isRecording=\(defaults.isRecording)")
 
-        // If already active, verify the audio pipeline is healthy.
-        // iOS may have deactivated our audio session while suspended — we need to recover.
+        // If already active, just write a fresh heartbeat and debounced-refresh.
+        // The full rebuild (if needed) is owned by handleForeground, which
+        // fires on scenePhase .active BEFORE DictationOverlayView.onAppear
+        // calls us. Having both paths trigger a rebuild caused a race where
+        // the second rebuild tore down what the first just built, leaving
+        // the pipeline in a half-broken state.
         if isSessionActive {
-            log("  session already active (in-memory) — verifying audio pipeline")
+            log("  session already active (in-memory) — writing heartbeat + debounced reactivate (handleForeground owns the rebuild path)")
+            defaults.writeHeartbeat()
             reactivateAudioPipeline()
             return
         }
@@ -127,8 +148,43 @@ final class BackgroundDictationService: ObservableObject {
             object: nil,
             queue: nil
         ) { [weak self] _ in
-            self?.log("AVAudioEngine config changed — restarting idle engine")
-            self?.reactivateAudioPipeline()
+            guard let self else { return }
+            self.log("AVAudioEngine config changed — marking session stale + restarting idle engine")
+            // Route/config change means the session may be in a limbo state.
+            // Force full re-setup on next startRecording.
+            self.audioSessionConfigured = false
+            self.reactivateAudioPipeline()
+        }
+
+        // Apple's documented "your audio state is toast, rebuild everything"
+        // signals. From the mediaServicesWereReset doc:
+        //   "Respond to these events by reinitializing your app's audio
+        //    objects and resetting your audio session's category, options,
+        //    and mode configuration."
+        // We cannot do that from background (setActive will fail with
+        // cannotInterruptOthers). Instead: mark session stale, zero the
+        // heartbeat so the keyboard shows "Start ST", and let the foreground
+        // path run the full rebuild.
+        NotificationCenter.default.addObserver(
+            forName: AVAudioSession.mediaServicesWereResetNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: nil
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.log("🚨 mediaServicesWereReset — session is toast, marking stale and zeroing heartbeat")
+            self.audioSessionConfigured = false
+            self.defaults.heartbeat = nil
+        }
+
+        NotificationCenter.default.addObserver(
+            forName: AVAudioSession.mediaServicesWereLostNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: nil
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.log("🚨 mediaServicesWereLost — session is toast, marking stale and zeroing heartbeat")
+            self.audioSessionConfigured = false
+            self.defaults.heartbeat = nil
         }
 
         // Heavy audio work OFF the main thread — this is what was blocking the UI.
@@ -277,6 +333,23 @@ final class BackgroundDictationService: ObservableObject {
 
         let session = AVAudioSession.sharedInstance()
 
+        // Zombie-session teardown: if iOS left us with a half-dead session after
+        // an interruption or config change, a fresh setCategory/setActive will
+        // hit error 561017449 ('cannot interrupt others') in a loop. Tearing
+        // down first gives the audio daemon a clean slate.
+        do {
+            try session.setActive(false, options: .notifyOthersOnDeactivation)
+            log("    audio setup: pre-teardown setActive(false) OK")
+        } catch {
+            // Best-effort — log but continue. If the session was already
+            // inactive or in a weird state, setCategory below will still try.
+            let nsErr = error as NSError
+            log("    audio setup: pre-teardown setActive(false) ignored (code=\(nsErr.code))")
+        }
+        // Tiny breathing room so the AV daemon notices the deactivation
+        // before we immediately ask it to re-activate.
+        try? await Task.sleep(nanoseconds: 80_000_000)
+
         // Define multiple config candidates in order of most-to-least permissive.
         // The FIRST one that works wins.
         let configs: [(String, AVAudioSession.Category, AVAudioSession.Mode, AVAudioSession.CategoryOptions, AVAudioSession.SetActiveOptions)] = [
@@ -302,7 +375,16 @@ final class BackgroundDictationService: ObservableObject {
                 do {
                     try session.setCategory(category, mode: mode, options: categoryOptions)
                     try session.setActive(true, options: activeOptions)
+
+                    // Force a route refresh. After wake-from-idle or a stale
+                    // Bluetooth route, setCategory+setActive can succeed while
+                    // the hardware mic silently delivers zeros. Explicitly
+                    // requesting a preferred input forces iOS to re-bind the
+                    // audio route to a live device.
+                    forcePreferredBuiltInMic(session: session)
+
                     log("    audio setup attempt \(attempt): ✓ \(configName)")
+                    logCurrentRoute(session: session, tag: "after \(configName)")
                     audioSessionConfigured = true
                     return true
                 } catch {
@@ -320,6 +402,39 @@ final class BackgroundDictationService: ObservableObject {
         return false
     }
 
+    /// Log current input/output route so we can see WHICH device iOS picked.
+    /// Critical for diagnosing "session active but mic silent" — usually means
+    /// a stale Bluetooth input or no input at all.
+    private func logCurrentRoute(session: AVAudioSession, tag: String) {
+        let route = session.currentRoute
+        let inputs = route.inputs.map { "\($0.portName)[\($0.portType.rawValue)]" }.joined(separator: ",")
+        let outputs = route.outputs.map { "\($0.portName)[\($0.portType.rawValue)]" }.joined(separator: ",")
+        log("    🎧 route (\(tag)): inputs=[\(inputs.isEmpty ? "NONE" : inputs)] outputs=[\(outputs.isEmpty ? "NONE" : outputs)]")
+    }
+
+    /// Try to force the built-in mic as the preferred input. After a stale
+    /// wake, the route may still point at a disconnected Bluetooth headset
+    /// causing silent capture. Switching to built-in mic refreshes the
+    /// hardware binding. Best-effort: logs and continues on error.
+    private func forcePreferredBuiltInMic(session: AVAudioSession) {
+        guard let inputs = session.availableInputs, !inputs.isEmpty else {
+            log("    🎤 forcePreferredInput: no availableInputs — skipping")
+            return
+        }
+
+        // Prefer built-in mic when available (most reliable after stale wake).
+        let builtIn = inputs.first { $0.portType == .builtInMic }
+        let target = builtIn ?? inputs.first!
+
+        do {
+            try session.setPreferredInput(target)
+            log("    🎤 forcePreferredInput: set to \(target.portName)[\(target.portType.rawValue)]")
+        } catch {
+            let nsErr = error as NSError
+            log("    🎤 forcePreferredInput: FAILED code=\(nsErr.code) — \(error.localizedDescription) — continuing anyway")
+        }
+    }
+
     // MARK: - Audio Interruption Handling
     //
     // Per Apple docs: "Starting in iOS 10, the system deactivates an app's audio session
@@ -335,8 +450,11 @@ final class BackgroundDictationService: ObservableObject {
         switch type {
         case .began:
             let wasSuspended = (userInfo[AVAudioSessionInterruptionWasSuspendedKey] as? Bool) ?? false
-            log("Audio interruption BEGAN (wasSuspended: \(wasSuspended))")
-            // Don't change session state — we want to recover, not tear down
+            log("Audio interruption BEGAN (wasSuspended: \(wasSuspended)) — marking session stale")
+            // iOS has deactivated our audio session. The next recording attempt
+            // MUST re-run setCategory/setActive from scratch — without this flag
+            // reset, startRecordingAsync would skip setup and record silence.
+            audioSessionConfigured = false
 
         case .ended:
             log("Audio interruption ENDED")
@@ -373,7 +491,15 @@ final class BackgroundDictationService: ObservableObject {
             guard let self else { return }
             let ok = await self.setupAudioSessionWithRetry(attempts: 2, backoffMs: 200)
             guard ok else {
-                self.log("reactivateAudioPipeline: audio session setup failed")
+                self.log("reactivateAudioPipeline: audio session setup failed — zeroing heartbeat so keyboard shows 'Start ST' CTA")
+                self.audioSessionConfigured = false
+                // Signal to the keyboard that the app is effectively dead.
+                // isAppAlive() checks heartbeat freshness, so clearing it
+                // flips the keyboard to the "Start ST" inactive toolbar
+                // within its next 3s poll. Leave sessionActive=true so that
+                // when the user foregrounds the app, activateSession's
+                // already-active branch runs the rebuild path.
+                self.defaults.heartbeat = nil
                 return
             }
             self.startIdleAudioEngine()
@@ -426,9 +552,10 @@ final class BackgroundDictationService: ObservableObject {
             log("  → skipping (session not active in memory)")
             return
         }
-        log("  → refreshing pipeline")
 
-        // Write heartbeat immediately so timestamp is fresh
+        // Write heartbeat immediately so timestamp is fresh — this flips
+        // the keyboard out of "Start ST" state even before the rebuild
+        // completes, so the UI feels responsive.
         defaults.writeHeartbeat()
 
         // Restart heartbeat timer if it was suspended
@@ -440,13 +567,93 @@ final class BackgroundDictationService: ObservableObject {
             heartbeatTimer = timer
         }
 
-        // ALWAYS reactivate audio pipeline — iOS may have deactivated it during suspend
-        reactivateAudioPipeline()
+        // Decide whether to do the full rebuild or just a lightweight refresh.
+        // Full rebuild is needed when the session is stale (audioSessionConfigured==false)
+        // OR the idle engine is dead. When we're in foreground, setCategory/setActive
+        // is actually allowed by iOS, so the rebuild can succeed.
+        let idleEngineRunning = audioEngine?.isRunning == true
+        if !audioSessionConfigured || !idleEngineRunning {
+            log("  → rebuildAudioPipelineFromScratch (audioSessionConfigured=\(audioSessionConfigured), idleEngineRunning=\(idleEngineRunning))")
+            Task.detached(priority: .userInitiated) { [weak self] in
+                await self?.rebuildAudioPipelineFromScratch()
+            }
+        } else {
+            log("  → pipeline looks healthy, debounced refresh only")
+            reactivateAudioPipeline()
+        }
 
         // Restart Live Activity if it was dismissed
         if currentActivity == nil {
             startLiveActivity()
         }
+    }
+
+    /// Apple's documented recovery path for `mediaServicesWereReset` and
+    /// similar "your audio state is toast" signals. Unlike reactivateAudioPipeline
+    /// (which only re-runs setCategory+setActive), this method fully tears down
+    /// and rebuilds the engine graph, which is what Apple explicitly recommends:
+    ///
+    ///   "Respond to these events by reinitializing your app's audio objects
+    ///    and resetting your audio session's category, options, and mode
+    ///    configuration."
+    ///
+    /// Only safe to call when the app is in the foreground — setActive will
+    /// fail with cannotInterruptOthers from background.
+    private func rebuildAudioPipelineFromScratch() async {
+        // Re-entry guard: if a rebuild is already in flight, the caller's
+        // intent is already being served. Skipping duplicates is safe because
+        // callers (handleForeground, URL scheme, mediaServicesReset) are all
+        // fire-and-forget signals, not workflows that wait on the result.
+        if rebuildInProgress {
+            log("🔨 rebuildAudioPipelineFromScratch: ALREADY IN PROGRESS — skipping duplicate call")
+            return
+        }
+        rebuildInProgress = true
+        defer { rebuildInProgress = false }
+
+        log("🔨 rebuildAudioPipelineFromScratch: starting (audioSessionConfigured=\(audioSessionConfigured), idleEngineRunning=\(audioEngine?.isRunning == true))")
+        await MainActor.run { self.pipelineStatus = .rebuilding }
+
+        // 1. Stop current engine, remove taps
+        if let engine = audioEngine {
+            if engine.isRunning {
+                engine.inputNode.removeTap(onBus: 0)
+                engine.stop()
+            }
+        }
+        audioEngine = nil
+        log("  🔨 old engine stopped and released")
+
+        // 2. Cancel any lingering recognition state
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        recognitionRequest = nil
+
+        // 3-6. Setup session from clean state (includes setActive(false)
+        //      teardown + setCategory/setMode/setActive + forcePreferredBuiltInMic
+        //      + route logging, all inside setupAudioSessionWithRetry).
+        audioSessionConfigured = false
+        let ok = await setupAudioSessionWithRetry(attempts: 3, backoffMs: 200)
+        guard ok else {
+            log("  🔨 rebuild FAILED at session setup — leaving heartbeat nil so keyboard keeps 'Start ST'")
+            defaults.heartbeat = nil
+            await MainActor.run { self.pipelineStatus = .idle }
+            await setActivationError("iOS refused the microphone even from the foreground. Close another audio app (Music, call) and tap Retry.")
+            return
+        }
+
+        // 7-9. Rebuild idle engine
+        startIdleAudioEngine()
+
+        // 10. Fresh session marks
+        defaults.writeHeartbeat()
+        defaults.bootId = SharedDefaults.currentBootID()
+        await MainActor.run {
+            self.activationError = nil
+            self.pipelineStatus = .ready
+        }
+
+        log("  🔨 rebuildAudioPipelineFromScratch: COMPLETE")
     }
 
     // MARK: - Live Activity
@@ -604,23 +811,34 @@ final class BackgroundDictationService: ObservableObject {
         }
 
         // Audio session setup. If we already configured the session during
-        // foreground activation, SKIP setCategory/setActive — iOS rejects those
+        // foreground activation AND the idle engine is still running (proof the
+        // session is alive), SKIP setCategory/setActive — iOS rejects those
         // calls from background with cannotInterruptOthers (error 560557684)
-        // when another app (Messages, etc.) holds audio priority. The session
-        // is still active from our foreground activation because the idle audio
-        // engine keeps it alive under UIBackgroundModes=audio.
-        if audioSessionConfigured {
+        // when another app holds audio priority.
+        //
+        // CRITICAL: The idle-engine check is what saves us after an interruption
+        // recovery fails. Previously we trusted audioSessionConfigured alone,
+        // which left a hole: a failed reactivateAudioPipeline would leave the
+        // flag true but the session/engine dead → we'd record pure silence.
+        let idleEngineRunning = audioEngine?.isRunning == true
+        let sessionLooksHealthy = audioSessionConfigured && idleEngineRunning
+        if sessionLooksHealthy {
             log("  step 2: audio session already configured from foreground — skipping setCategory/setActive")
         } else {
-            log("  step 2: setting up audio session for the first time (retry x3)...")
+            if !idleEngineRunning {
+                log("  step 2: idle engine NOT running (audioSessionConfigured=\(audioSessionConfigured)) — session is stale, re-running setup")
+                audioSessionConfigured = false
+            } else {
+                log("  step 2: setting up audio session for the first time (retry x3)...")
+            }
             let audioReady = await setupAudioSessionWithRetry(attempts: 3, backoffMs: 200)
             guard audioReady else {
-                log("❌ BLOCK: audio session not ready after 3 retries")
-                await setActivationError("Couldn't configure the microphone. Tap Retry.")
+                log("❌ BLOCK: audio session not ready after 3 retries (likely another app holds the audio route — Messages, call, Bluetooth, etc.)")
+                await setActivationError("iOS won't release the microphone right now. Open Stop Typing and tap Retry — bringing the app to the foreground usually fixes this.")
                 emitRecordingFailed()
                 return
             }
-            log("  ✓ step 2 done: audio session ready")
+            log("  ✓ step 2 done: audio session ready (fresh setup)")
         }
 
         log("  step 3: cancelling prior recognition task + resetting state")
