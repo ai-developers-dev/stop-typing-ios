@@ -229,51 +229,64 @@ final class BackgroundDictationService: ObservableObject {
         log("🔥 Warmup complete (speech auth status: \(status.rawValue))")
     }
 
-    /// Fix 2.2: Tries to configure + activate the AVAudioSession, retrying on failure.
-    /// Returns true on success, false if all attempts failed.
+    /// Fix 2.2: Tries to configure + activate the AVAudioSession with layered fallbacks.
+    /// Returns true on success, false if all configs failed.
     ///
-    /// Uses the Apple Speech framework recommended config:
-    ///   .playAndRecord + .measurement + .duckOthers + .defaultToSpeaker
-    /// On failure, falls back to the simpler .record + .measurement pattern
-    /// that matches Apple's SFSpeechRecognizer sample code.
+    /// OSStatus 560557684 = 'int!' = AVAudioSession.ErrorCode.cannotInterruptOthers.
+    /// This happens when:
+    /// - Another audio session is active and holds interruption priority
+    /// - App is not in foreground when setActive fires
+    /// - Options like .duckOthers / .notifyOthersOnDeactivation try to interrupt
+    ///   but we don't have permission
+    ///
+    /// The fix: try the MOST PERMISSIVE config first (.mixWithOthers, no
+    /// notifyOthersOnDeactivation). Only escalate to more aggressive configs
+    /// if the permissive one fails.
     private func setupAudioSessionWithRetry(attempts: Int, backoffMs: Int) async -> Bool {
         log("    audio setup: mic permission = \(micPermissionDescription(AVAudioApplication.shared.recordPermission))")
 
         let session = AVAudioSession.sharedInstance()
 
-        // Primary config: playAndRecord (needed so the idle engine keeps the session
-        // alive during backgrounding) with a simpler options set. We dropped
-        // .mixWithOthers and .allowBluetooth which were sometimes causing setActive
-        // to fail on fresh install.
+        // Define multiple config candidates in order of most-to-least permissive.
+        // The FIRST one that works wins.
+        let configs: [(String, AVAudioSession.Category, AVAudioSession.Mode, AVAudioSession.CategoryOptions, AVAudioSession.SetActiveOptions)] = [
+            // Most permissive: coexist with any other audio session. No interruption.
+            ("playAndRecord+mixWithOthers",
+             .playAndRecord, .measurement,
+             [.mixWithOthers, .defaultToSpeaker, .allowBluetooth],
+             []),
+            // No mixWithOthers but no interruption notification either
+            ("playAndRecord+defaultToSpeaker",
+             .playAndRecord, .measurement,
+             [.defaultToSpeaker, .allowBluetooth],
+             []),
+            // Minimal record (Apple Speech sample pattern)
+            ("record+measurement",
+             .record, .measurement,
+             [],
+             []),
+        ]
+
         for attempt in 1...attempts {
-            do {
-                try session.setCategory(.playAndRecord, mode: .measurement,
-                                        options: [.duckOthers, .defaultToSpeaker])
-                try session.setActive(true, options: .notifyOthersOnDeactivation)
-                log("    audio setup attempt \(attempt)/\(attempts): ✓ (primary config)")
-                return true
-            } catch {
-                let nsErr = error as NSError
-                log("    audio setup attempt \(attempt)/\(attempts): ✗ code=\(nsErr.code) — \(error.localizedDescription)")
-                if attempt < attempts {
-                    try? await Task.sleep(nanoseconds: UInt64(backoffMs) * 1_000_000)
+            for (configName, category, mode, categoryOptions, activeOptions) in configs {
+                do {
+                    try session.setCategory(category, mode: mode, options: categoryOptions)
+                    try session.setActive(true, options: activeOptions)
+                    log("    audio setup attempt \(attempt): ✓ \(configName)")
+                    return true
+                } catch {
+                    let nsErr = error as NSError
+                    log("    audio setup attempt \(attempt) [\(configName)]: ✗ code=\(nsErr.code) — \(error.localizedDescription)")
                 }
+            }
+            // All configs failed this attempt — back off and try again
+            if attempt < attempts {
+                try? await Task.sleep(nanoseconds: UInt64(backoffMs) * 1_000_000)
             }
         }
 
-        // Fallback: try the minimal .record config that Apple's Speech sample uses.
-        // If this succeeds, the idle engine won't stay alive during backgrounding,
-        // but at least recording will work for the current session.
-        log("    audio setup: trying fallback .record config")
-        do {
-            try session.setCategory(.record, mode: .measurement, options: .duckOthers)
-            try session.setActive(true, options: .notifyOthersOnDeactivation)
-            log("    audio setup fallback: ✓ (.record config)")
-            return true
-        } catch {
-            log("    audio setup fallback FAILED: \((error as NSError).code) — \(error.localizedDescription)")
-            return false
-        }
+        log("    ❌ audio setup: all configs failed after \(attempts) attempts")
+        return false
     }
 
     // MARK: - Audio Interruption Handling
