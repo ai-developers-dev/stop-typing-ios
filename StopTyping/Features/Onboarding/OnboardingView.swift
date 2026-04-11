@@ -1,14 +1,13 @@
 import SwiftUI
 
+// MARK: - Root Onboarding View
+//
+// Lightweight wrapper that only owns navigation state. No expensive @StateObject
+// at this level — pages that need system services (permissions, speech) own their
+// own StateObjects so they're created lazily when the user actually reaches them.
+
 struct OnboardingView: View {
-    @StateObject private var permissions = PermissionsManager()
-    @StateObject private var speechService = AppleSpeechService()
     @AppStorage("onboardingCurrentPage") private var currentPage = 0
-    @State private var testTranscript = ""
-    @State private var isRecording = false
-    @State private var isProcessing = false
-    @State private var showTestSuccess = false
-    @State private var testError = ""
     var onComplete: () -> Void
 
     private let totalSegments = 3
@@ -17,39 +16,74 @@ struct OnboardingView: View {
         ZStack {
             AppTheme.surface.ignoresSafeArea()
 
-            Group {
-                switch currentPage {
-                case 0: welcomeHeroPage
-                case 1: valuePropsPage
-                case 2: microphonePage
-                case 3: setupIntroPage
-                case 4: keyboardSettingsPage
-                case 5: testDictationPage
-                case 6: useKeyboardPage
-                default: useKeyboardPage
-                }
-            }
-            .transition(.opacity.combined(with: .move(edge: .trailing)))
-            .animation(.easeInOut(duration: 0.3), value: currentPage)
+            pageView
         }
         .onAppear {
             if currentPage > 6 { currentPage = 0 }
         }
     }
 
+    @ViewBuilder
+    private var pageView: some View {
+        switch currentPage {
+        case 0:
+            WelcomeHeroPage(onNext: { goTo(1) })
+        case 1:
+            ValuePropsPage(
+                onBack: { goBack() },
+                onNext: { goTo(2) },
+                totalSegments: totalSegments
+            )
+        case 2:
+            MicrophonePermissionPage(
+                onBack: { goBack() },
+                onNext: { goTo(3) },
+                totalSegments: totalSegments
+            )
+        case 3:
+            SetupIntroPage(
+                onBack: { goBack() },
+                onNext: { goTo(4) },
+                totalSegments: totalSegments
+            )
+        case 4:
+            KeyboardSettingsPage(
+                onBack: { goBack() },
+                onNext: { goTo(5) },
+                totalSegments: totalSegments
+            )
+        case 5:
+            TestDictationPage(
+                onBack: { goBack() },
+                onNext: { goTo(6) },
+                totalSegments: totalSegments
+            )
+        default:
+            UseKeyboardPage(
+                onBack: { goBack() },
+                onComplete: onComplete,
+                totalSegments: totalSegments
+            )
+        }
+    }
+
     private func goTo(_ page: Int) {
-        withAnimation { currentPage = page }
+        withAnimation(.easeInOut(duration: 0.3)) { currentPage = page }
     }
 
     private func goBack() {
-        withAnimation { currentPage = max(0, currentPage - 1) }
+        withAnimation(.easeInOut(duration: 0.3)) {
+            currentPage = max(0, currentPage - 1)
+        }
     }
+}
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // MARK: - Screen 0: Welcome Hero
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// MARK: - Screen 0: Welcome Hero
 
-    private var welcomeHeroPage: some View {
+struct WelcomeHeroPage: View {
+    let onNext: () -> Void
+
+    var body: some View {
         VStack(spacing: 0) {
             Spacer()
 
@@ -74,7 +108,6 @@ struct OnboardingView: View {
                 .multilineTextAlignment(.center)
                 .padding(.bottom, 12)
 
-            // "Your voice, 4x faster than typing"
             (
                 Text("Your voice, ")
                     .foregroundStyle(AppTheme.onSurface)
@@ -91,22 +124,24 @@ struct OnboardingView: View {
 
             Spacer()
 
-            DarkCTAButton(title: "Get Started") {
-                goTo(1)
-            }
-            .padding(.horizontal, AppTheme.paddingLarge)
-            .padding(.bottom, AppTheme.paddingXL)
+            DarkCTAButton(title: "Get Started", action: onNext)
+                .padding(.horizontal, AppTheme.paddingLarge)
+                .padding(.bottom, AppTheme.paddingXL)
         }
     }
+}
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // MARK: - Screen 1: Value Props
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// MARK: - Screen 1: Value Props
 
-    private var valuePropsPage: some View {
+struct ValuePropsPage: View {
+    let onBack: () -> Void
+    let onNext: () -> Void
+    let totalSegments: Int
+
+    var body: some View {
         VStack(spacing: 0) {
             OnboardingNavBar(
-                showBack: true, onBack: goBack,
+                showBack: true, onBack: onBack,
                 currentSegment: 0, totalSegments: totalSegments
             )
 
@@ -128,28 +163,35 @@ struct OnboardingView: View {
 
             Spacer()
 
-            DarkCTAButton(title: "Next") {
-                goTo(2)
-            }
-            .padding(.horizontal, AppTheme.paddingLarge)
-            .padding(.bottom, AppTheme.paddingXL)
+            DarkCTAButton(title: "Next", action: onNext)
+                .padding(.horizontal, AppTheme.paddingLarge)
+                .padding(.bottom, AppTheme.paddingXL)
         }
     }
+}
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // MARK: - Screen 2: Microphone Permission
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// MARK: - Screen 2: Microphone Permission
+//
+// This is the FIRST page that needs PermissionsManager. It owns its own
+// @StateObject so the system APIs are only touched when the user reaches
+// this screen, not at app launch.
 
-    private var microphonePage: some View {
+struct MicrophonePermissionPage: View {
+    let onBack: () -> Void
+    let onNext: () -> Void
+    let totalSegments: Int
+
+    @StateObject private var permissions = PermissionsManager()
+
+    var body: some View {
         VStack(spacing: 0) {
             OnboardingNavBar(
-                showBack: true, onBack: goBack,
+                showBack: true, onBack: onBack,
                 currentSegment: 1, totalSegments: totalSegments
             )
 
             Spacer()
 
-            // Mic in purple gradient circle
             Image(systemName: "mic.fill")
                 .font(.system(size: 32))
                 .foregroundStyle(.white)
@@ -184,40 +226,42 @@ struct OnboardingView: View {
                 }
                 .padding(.bottom, 16)
 
-                DarkCTAButton(title: "Continue") {
-                    goTo(3)
-                }
-                .padding(.horizontal, AppTheme.paddingLarge)
+                DarkCTAButton(title: "Continue", action: onNext)
+                    .padding(.horizontal, AppTheme.paddingLarge)
             } else {
                 DarkCTAButton(title: "Enable Microphone") {
                     Task {
                         let mic = await permissions.requestMicrophone()
                         if mic {
-                            await permissions.requestSpeechRecognition()
+                            _ = await permissions.requestSpeechRecognition()
                         }
                         if permissions.microphoneGranted {
-                            goTo(3)
+                            onNext()
                         }
                     }
                 }
                 .padding(.horizontal, AppTheme.paddingLarge)
 
-                SkipLink(title: "Skip for now") { goTo(3) }
+                SkipLink(title: "Skip for now", action: onNext)
                     .padding(.top, 12)
             }
 
             Spacer().frame(height: AppTheme.paddingXL)
         }
     }
+}
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // MARK: - Screen 3: Setup Intro
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// MARK: - Screen 3: Setup Intro
 
-    private var setupIntroPage: some View {
+struct SetupIntroPage: View {
+    let onBack: () -> Void
+    let onNext: () -> Void
+    let totalSegments: Int
+
+    var body: some View {
         VStack(spacing: 0) {
             OnboardingNavBar(
-                showBack: true, onBack: goBack,
+                showBack: true, onBack: onBack,
                 currentSegment: 2, totalSegments: totalSegments
             )
 
@@ -236,22 +280,24 @@ struct OnboardingView: View {
 
             Spacer()
 
-            SoftCTAButton(title: "Set up") {
-                goTo(4)
-            }
-            .padding(.horizontal, AppTheme.paddingLarge)
-            .padding(.bottom, AppTheme.paddingXL)
+            SoftCTAButton(title: "Set up", action: onNext)
+                .padding(.horizontal, AppTheme.paddingLarge)
+                .padding(.bottom, AppTheme.paddingXL)
         }
     }
+}
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // MARK: - Screen 4: Keyboard Settings
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// MARK: - Screen 4: Keyboard Settings
 
-    private var keyboardSettingsPage: some View {
+struct KeyboardSettingsPage: View {
+    let onBack: () -> Void
+    let onNext: () -> Void
+    let totalSegments: Int
+
+    var body: some View {
         VStack(spacing: 0) {
             OnboardingNavBar(
-                showBack: true, onBack: goBack,
+                showBack: true, onBack: onBack,
                 currentSegment: 2, totalSegments: totalSegments
             )
 
@@ -278,7 +324,6 @@ struct OnboardingView: View {
                     }
                     .padding(.horizontal, AppTheme.paddingLarge)
 
-                    // Instructions tooltip
                     VStack(alignment: .leading, spacing: 8) {
                         instructionRow(icon: "keyboard", text: "Click Keyboards", color: .green)
                         instructionRow(icon: "togglepower", text: "Turn on Stop Typing", color: .green)
@@ -292,12 +337,10 @@ struct OnboardingView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .padding(.horizontal, AppTheme.paddingLarge)
 
-                    SoftCTAButton(title: "I've enabled it — Next") {
-                        goTo(5)
-                    }
-                    .padding(.horizontal, AppTheme.paddingLarge)
+                    SoftCTAButton(title: "I've enabled it — Next", action: onNext)
+                        .padding(.horizontal, AppTheme.paddingLarge)
 
-                    SkipLink(title: "Skip for now") { goTo(5) }
+                    SkipLink(title: "Skip for now", action: onNext)
                         .padding(.bottom, AppTheme.paddingXL)
                 }
             }
@@ -315,16 +358,32 @@ struct OnboardingView: View {
                 .foregroundStyle(color)
         }
     }
+}
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // MARK: - Screen 5: Test Dictation
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// MARK: - Screen 5: Test Dictation
+//
+// This is the ONLY page that needs AppleSpeechService + PermissionsManager.
+// They're owned here so they're only created when the user reaches this screen.
 
-    private var testDictationPage: some View {
+struct TestDictationPage: View {
+    let onBack: () -> Void
+    let onNext: () -> Void
+    let totalSegments: Int
+
+    @StateObject private var permissions = PermissionsManager()
+    @StateObject private var speechService = AppleSpeechService()
+
+    @State private var testTranscript = ""
+    @State private var isRecording = false
+    @State private var isProcessing = false
+    @State private var showTestSuccess = false
+    @State private var testError = ""
+
+    var body: some View {
         VStack(spacing: 0) {
             OnboardingNavBar(
-                showBack: true, onBack: goBack,
-                showSkip: true, onSkip: { goTo(6) },
+                showBack: true, onBack: onBack,
+                showSkip: true, onSkip: onNext,
                 currentSegment: 2, totalSegments: totalSegments
             )
 
@@ -356,9 +415,7 @@ struct OnboardingView: View {
                         .foregroundStyle(AppTheme.onSurface)
                         .padding(.top, 8)
 
-                    DarkCTAButton(title: "Next") {
-                        goTo(6)
-                    }
+                    DarkCTAButton(title: "Next", action: onNext)
                 } else if isProcessing {
                     VStack(spacing: 12) {
                         ProgressView()
@@ -368,107 +425,9 @@ struct OnboardingView: View {
                     }
                     .padding(.top, 16)
                 } else if isRecording {
-                    VStack(spacing: 12) {
-                        HStack(spacing: 4) {
-                            ForEach(0..<9, id: \.self) { _ in
-                                Circle()
-                                    .fill(AppTheme.onSurface)
-                                    .frame(width: 8, height: 8)
-                                    .opacity(Double.random(in: 0.3...1.0))
-                            }
-                        }
-
-                        Text("Listening...")
-                            .font(AppTheme.onboardingSubhead)
-                            .foregroundStyle(AppTheme.onSurfaceVariant)
-
-                        HStack(spacing: 24) {
-                            Button {
-                                speechService.cancel()
-                                isRecording = false
-                                testTranscript = ""
-                            } label: {
-                                Image(systemName: "xmark")
-                                    .font(.system(size: 18, weight: .medium))
-                                    .foregroundStyle(AppTheme.onSurface)
-                                    .frame(width: 44, height: 44)
-                                    .background(AppTheme.surfaceContainerHigh)
-                                    .clipShape(Circle())
-                            }
-
-                            Button {
-                                Task {
-                                    isRecording = false
-                                    isProcessing = true
-                                    do {
-                                        let transcript = try await speechService.stopRecording()
-                                        testTranscript = transcript
-                                        showTestSuccess = true
-                                    } catch {
-                                        testError = error.localizedDescription
-                                        testTranscript = ""
-                                    }
-                                    isProcessing = false
-                                }
-                            } label: {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 18, weight: .bold))
-                                    .foregroundStyle(.white)
-                                    .frame(width: 44, height: 44)
-                                    .background(AppTheme.ctaDark)
-                                    .clipShape(Circle())
-                            }
-                        }
-                    }
-                    .padding(.top, 16)
+                    recordingControls
                 } else {
-                    if !testError.isEmpty {
-                        Text(testError)
-                            .font(AppTheme.onboardingPrivacyFont)
-                            .foregroundStyle(AppTheme.error)
-                            .multilineTextAlignment(.center)
-                            .padding(.top, 8)
-                    }
-
-                    HStack {
-                        Text("Tap the mic to start speaking →")
-                            .font(AppTheme.onboardingSubhead)
-                            .foregroundStyle(AppTheme.onSurfaceVariant)
-
-                        Button {
-                            Task {
-                                testError = ""
-                                if !permissions.microphoneGranted {
-                                    let granted = await permissions.requestMicrophone()
-                                    guard granted else {
-                                        testError = "Microphone access is needed."
-                                        return
-                                    }
-                                }
-                                if !permissions.speechGranted {
-                                    let granted = await permissions.requestSpeechRecognition()
-                                    guard granted else {
-                                        testError = "Speech recognition access is needed."
-                                        return
-                                    }
-                                }
-                                do {
-                                    try await speechService.startRecording()
-                                    isRecording = true
-                                } catch {
-                                    testError = error.localizedDescription
-                                }
-                            }
-                        } label: {
-                            Image(systemName: "mic.fill")
-                                .font(.system(size: 20))
-                                .foregroundStyle(.white)
-                                .frame(width: 44, height: 44)
-                                .background(AppTheme.ctaDark)
-                                .clipShape(Circle())
-                        }
-                    }
-                    .padding(.top, 16)
+                    startControls
                 }
             }
             .padding(.horizontal, AppTheme.paddingLarge)
@@ -477,14 +436,126 @@ struct OnboardingView: View {
         }
     }
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // MARK: - Screen 6: Use Keyboard (LAST)
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    private var recordingControls: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 4) {
+                ForEach(0..<9, id: \.self) { _ in
+                    Circle()
+                        .fill(AppTheme.onSurface)
+                        .frame(width: 8, height: 8)
+                        .opacity(Double.random(in: 0.3...1.0))
+                }
+            }
 
-    private var useKeyboardPage: some View {
+            Text("Listening...")
+                .font(AppTheme.onboardingSubhead)
+                .foregroundStyle(AppTheme.onSurfaceVariant)
+
+            HStack(spacing: 24) {
+                Button {
+                    speechService.cancel()
+                    isRecording = false
+                    testTranscript = ""
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(AppTheme.onSurface)
+                        .frame(width: 44, height: 44)
+                        .background(AppTheme.surfaceContainerHigh)
+                        .clipShape(Circle())
+                }
+
+                Button {
+                    Task {
+                        isRecording = false
+                        isProcessing = true
+                        do {
+                            let transcript = try await speechService.stopRecording()
+                            testTranscript = transcript
+                            showTestSuccess = true
+                        } catch {
+                            testError = error.localizedDescription
+                            testTranscript = ""
+                        }
+                        isProcessing = false
+                    }
+                } label: {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 44, height: 44)
+                        .background(AppTheme.ctaDark)
+                        .clipShape(Circle())
+                }
+            }
+        }
+        .padding(.top, 16)
+    }
+
+    private var startControls: some View {
+        VStack {
+            if !testError.isEmpty {
+                Text(testError)
+                    .font(AppTheme.onboardingPrivacyFont)
+                    .foregroundStyle(AppTheme.error)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 8)
+            }
+
+            HStack {
+                Text("Tap the mic to start speaking →")
+                    .font(AppTheme.onboardingSubhead)
+                    .foregroundStyle(AppTheme.onSurfaceVariant)
+
+                Button {
+                    Task {
+                        testError = ""
+                        if !permissions.microphoneGranted {
+                            let granted = await permissions.requestMicrophone()
+                            guard granted else {
+                                testError = "Microphone access is needed."
+                                return
+                            }
+                        }
+                        if !permissions.speechGranted {
+                            let granted = await permissions.requestSpeechRecognition()
+                            guard granted else {
+                                testError = "Speech recognition access is needed."
+                                return
+                            }
+                        }
+                        do {
+                            try await speechService.startRecording()
+                            isRecording = true
+                        } catch {
+                            testError = error.localizedDescription
+                        }
+                    }
+                } label: {
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 20))
+                        .foregroundStyle(.white)
+                        .frame(width: 44, height: 44)
+                        .background(AppTheme.ctaDark)
+                        .clipShape(Circle())
+                }
+            }
+            .padding(.top, 16)
+        }
+    }
+}
+
+// MARK: - Screen 6: Use Keyboard (LAST)
+
+struct UseKeyboardPage: View {
+    let onBack: () -> Void
+    let onComplete: () -> Void
+    let totalSegments: Int
+
+    var body: some View {
         VStack(spacing: 0) {
             OnboardingNavBar(
-                showBack: true, onBack: goBack,
+                showBack: true, onBack: onBack,
                 currentSegment: 2, totalSegments: totalSegments
             )
 
@@ -513,11 +584,9 @@ struct OnboardingView: View {
 
             Spacer()
 
-            DarkCTAButton(title: "Start Using Stop Typing") {
-                onComplete()
-            }
-            .padding(.horizontal, AppTheme.paddingLarge)
-            .padding(.bottom, AppTheme.paddingXL)
+            DarkCTAButton(title: "Start Using Stop Typing", action: onComplete)
+                .padding(.horizontal, AppTheme.paddingLarge)
+                .padding(.bottom, AppTheme.paddingXL)
         }
     }
 
