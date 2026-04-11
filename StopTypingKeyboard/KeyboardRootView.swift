@@ -170,7 +170,7 @@ struct KeyboardRootView: View {
                     .font(.system(size: 20))
                     .foregroundStyle(.white)
                     .frame(width: 48, height: 48)
-                    .background(Color(UIColor.systemGray3))
+                    .background(Color(UIColor.darkGray))
                     .clipShape(Circle())
             }
         }
