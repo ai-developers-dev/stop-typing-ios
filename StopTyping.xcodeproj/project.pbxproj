@@ -23,14 +23,9 @@
 		AA000006 /* PermissionsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000006 /* PermissionsManager.swift */; };
 		AA000007 /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000007 /* TranscriptionService.swift */; };
 		AA000008 /* AppleSpeechService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000008 /* AppleSpeechService.swift */; };
-		AA000009 /* RemoteTranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000009 /* RemoteTranscriptionService.swift */; };
-		AA000010 /* RewriteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000010 /* RewriteService.swift */; };
-		AA000011 /* LocalRewriteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000011 /* LocalRewriteService.swift */; };
-		AA000012 /* RemoteRewriteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000012 /* RemoteRewriteService.swift */; };
 		AA000013 /* SharedStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000013 /* SharedStateManager.swift */; };
 		AA000014 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000014 /* HomeView.swift */; };
 		AA000015 /* HomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000015 /* HomeViewModel.swift */; };
-		AA000016 /* RecordingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000016 /* RecordingView.swift */; };
 		AA000017 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000017 /* HistoryView.swift */; };
 		AA000018 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000018 /* SettingsView.swift */; };
 		AA000019 /* KeyboardSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000019 /* KeyboardSetupView.swift */; };
@@ -103,14 +98,9 @@
 		BB000006 /* PermissionsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionsManager.swift; sourceTree = "<group>"; };
 		BB000007 /* TranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionService.swift; sourceTree = "<group>"; };
 		BB000008 /* AppleSpeechService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSpeechService.swift; sourceTree = "<group>"; };
-		BB000009 /* RemoteTranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteTranscriptionService.swift; sourceTree = "<group>"; };
-		BB000010 /* RewriteService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewriteService.swift; sourceTree = "<group>"; };
-		BB000011 /* LocalRewriteService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalRewriteService.swift; sourceTree = "<group>"; };
-		BB000012 /* RemoteRewriteService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteRewriteService.swift; sourceTree = "<group>"; };
 		BB000013 /* SharedStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedStateManager.swift; sourceTree = "<group>"; };
 		BB000014 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		BB000015 /* HomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeViewModel.swift; sourceTree = "<group>"; };
-		BB000016 /* RecordingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingView.swift; sourceTree = "<group>"; };
 		BB000017 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
 		BB000018 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		BB000019 /* KeyboardSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardSetupView.swift; sourceTree = "<group>"; };
@@ -241,7 +231,6 @@
 				BB000026 /* BackgroundDictationService.swift */,
 				BB000028 /* GroqService.swift */,
 				GG000006 /* Transcription */,
-				GG000007 /* Rewrite */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -251,19 +240,8 @@
 			children = (
 				BB000007 /* TranscriptionService.swift */,
 				BB000008 /* AppleSpeechService.swift */,
-				BB000009 /* RemoteTranscriptionService.swift */,
 			);
 			path = Transcription;
-			sourceTree = "<group>";
-		};
-		GG000007 /* Rewrite */ = {
-			isa = PBXGroup;
-			children = (
-				BB000010 /* RewriteService.swift */,
-				BB000011 /* LocalRewriteService.swift */,
-				BB000012 /* RemoteRewriteService.swift */,
-			);
-			path = Rewrite;
 			sourceTree = "<group>";
 		};
 		GG000010 /* Features */ = {
@@ -300,7 +278,6 @@
 		GG000013 /* Recording */ = {
 			isa = PBXGroup;
 			children = (
-				BB000016 /* RecordingView.swift */,
 				BB000025 /* DictationOverlayView.swift */,
 			);
 			path = Recording;
@@ -515,10 +492,6 @@
 				AA000006 /* PermissionsManager.swift in Sources */,
 				AA000007 /* TranscriptionService.swift in Sources */,
 				AA000008 /* AppleSpeechService.swift in Sources */,
-				AA000009 /* RemoteTranscriptionService.swift in Sources */,
-				AA000010 /* RewriteService.swift in Sources */,
-				AA000011 /* LocalRewriteService.swift in Sources */,
-				AA000012 /* RemoteRewriteService.swift in Sources */,
 				AA000013 /* SharedStateManager.swift in Sources */,
 				AA000026 /* BackgroundDictationService.swift in Sources */,
 				AA000028 /* GroqService.swift in Sources */,
@@ -526,7 +499,6 @@
 				687F8D532F885B00001BA624 /* SharedKeyboardState.swift in Sources */,
 				AA000014 /* HomeView.swift in Sources */,
 				AA000015 /* HomeViewModel.swift in Sources */,
-				AA000016 /* RecordingView.swift in Sources */,
 				AA000025 /* DictationOverlayView.swift in Sources */,
 				AA000017 /* HistoryView.swift in Sources */,
 				AA000018 /* SettingsView.swift in Sources */,
