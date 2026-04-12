@@ -65,6 +65,7 @@ final class BackgroundDictationService: ObservableObject {
     private var currentTapBufferCount: Int = 0
     private var currentPartialResultCount: Int = 0
     private var currentRecordingStartTime: Date = .distantPast
+    private var recognitionIsFinal: Bool = false
 
     private init() {}
 
@@ -920,6 +921,7 @@ final class BackgroundDictationService: ObservableObject {
         currentTapBufferCount = 0
         currentPartialResultCount = 0
         audioLevelLogCounter = 0
+        recognitionIsFinal = false
         currentRecordingStartTime = Date()
         defaults.isRecording = true
         defaults.audioLevel = 0
@@ -955,6 +957,7 @@ final class BackgroundDictationService: ObservableObject {
                     self.log("  🗣️ first partial result after \(String(format: "%.2f", elapsed))s: '\(self.currentTranscript.prefix(40))'")
                 }
                 if result.isFinal {
+                    self.recognitionIsFinal = true
                     self.log("ASR final result: '\(self.currentTranscript.prefix(60))'")
                 }
             }
@@ -1132,10 +1135,24 @@ final class BackgroundDictationService: ObservableObject {
         DispatchQueue.main.async { self.isCurrentlyRecording = false }
         updateLiveActivity(isRecording: false)
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+        Task { [weak self] in
             guard let self else { return }
+
+            // Wait for the recognizer to produce a final result. The old
+            // fixed 500ms delay missed slow-recognizer cases where the first
+            // partial didn't arrive until 2+ seconds after endAudio(). The
+            // poll checks every 100ms, exits as soon as isFinal fires, and
+            // caps at 3s so we never hang.
+            let maxWaitMs = 3000
+            var waited = 0
+            while waited < maxWaitMs {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                waited += 100
+                if self.recognitionIsFinal { break }
+            }
+
             let rawTranscript = self.currentTranscript
-            self.log("Raw ASR: '\(rawTranscript.prefix(80))'")
+            self.log("ASR wait: \(waited)ms (isFinal=\(self.recognitionIsFinal), transcript='\(rawTranscript.prefix(60))')")
 
             self.recognitionTask?.cancel()
             self.recognitionTask = nil
@@ -1143,20 +1160,18 @@ final class BackgroundDictationService: ObservableObject {
             self.currentTranscript = ""
 
             if !rawTranscript.isEmpty {
-                Task {
-                    let cleanedTranscript = await GroqService.shared.cleanTranscript(rawTranscript)
-                    self.log("LLM cleaned: '\(cleanedTranscript.prefix(80))'")
+                let cleanedTranscript = await GroqService.shared.cleanTranscript(rawTranscript)
+                self.log("LLM cleaned: '\(cleanedTranscript.prefix(80))'")
 
-                    await MainActor.run {
-                        self.lastTranscript = cleanedTranscript
-                        self.defaults.saveTranscript(cleanedTranscript)
-                        TranscriptHistoryStore.shared.add(TranscriptItem(text: cleanedTranscript))
-                        self.darwin.post(DarwinNotificationName.transcriptReady)
-                        self.log("Cleaned transcript saved, notified keyboard")
-                    }
+                await MainActor.run {
+                    self.lastTranscript = cleanedTranscript
+                    self.defaults.saveTranscript(cleanedTranscript)
+                    TranscriptHistoryStore.shared.add(TranscriptItem(text: cleanedTranscript))
+                    self.darwin.post(DarwinNotificationName.transcriptReady)
+                    self.log("Cleaned transcript saved, notified keyboard")
                 }
             } else {
-                self.log("Empty transcript")
+                self.log("Empty transcript after \(waited)ms wait")
             }
 
             self.startIdleAudioEngine()
