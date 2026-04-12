@@ -543,8 +543,10 @@ final class BackgroundDictationService: ObservableObject {
 
         // If actively recording, clean up since the audio engine will be suspended
         if isCurrentlyRecording {
-            log("Was recording when backgrounded — cleaning up")
-            stopEngine()
+            log("Was recording when backgrounded — cleaning up, swapping to idle tap")
+            // Swap to idle tap instead of stop+start — keeps engine running so
+            // the audio hardware isn't released (prevents 2003329396 on next record)
+            swapToIdleTap()
             recognitionRequest?.endAudio()
 
             let rawTranscript = currentTranscript
@@ -564,8 +566,6 @@ final class BackgroundDictationService: ObservableObject {
                     }
                 }
             }
-
-            startIdleAudioEngine()
         }
     }
 
@@ -928,16 +928,23 @@ final class BackgroundDictationService: ObservableObject {
         previousAudioLevel = 0
         await MainActor.run { self.isCurrentlyRecording = true }
 
-        // Stop idle engine
-        if let engine = audioEngine, engine.isRunning {
-            log("  step 4: stopping idle engine")
-            engine.inputNode.removeTap(onBus: 0)
-            engine.stop()
-        }
-
-        log("  step 5: creating fresh AVAudioEngine")
-        let engine = AVAudioEngine()
-        self.audioEngine = engine
+        // === CORE FIX: Swap taps on the RUNNING engine instead of stop+create+start ===
+        //
+        // After an audio interruption (e.g. phone call, Siri, media controls),
+        // iOS's CoreAudio HAL will NOT allow a new AVAudioEngine to call startIO
+        // from a backgrounded app — it fails with error 2003329396
+        // (kAudioUnitErr_FailedInitialization / 'what'). This was the root cause
+        // of the recurring "dictation stops working after ~1 day" bug.
+        //
+        // The fix: KEEP the idle engine running and swap its input tap handler
+        // from "discard audio" to "feed into SFSpeechRecognitionRequest". No
+        // engine.stop(), no engine = AVAudioEngine(), no engine.start().
+        // The engine holds the audio hardware from the foreground activation,
+        // and we just redirect where the buffers go.
+        //
+        // If the engine ISN'T running (e.g. after a cold start or a failed
+        // reactivation), fall back to the old create+start path — which should
+        // only happen when the app is in the foreground.
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
@@ -951,7 +958,6 @@ final class BackgroundDictationService: ObservableObject {
             if let result {
                 self.currentTranscript = result.bestTranscription.formattedString
                 self.currentPartialResultCount += 1
-                // Log first partial to prove the recognizer is actually receiving audio
                 if self.currentPartialResultCount == 1 {
                     let elapsed = Date().timeIntervalSince(self.currentRecordingStartTime)
                     self.log("  🗣️ first partial result after \(String(format: "%.2f", elapsed))s: '\(self.currentTranscript.prefix(40))'")
@@ -966,52 +972,68 @@ final class BackgroundDictationService: ObservableObject {
             }
         }
 
-        log("  step 6: installing input tap + prepare engine")
-        let inputNode = engine.inputNode
-        let format = inputNode.outputFormat(forBus: 0)
+        if let engine = audioEngine, engine.isRunning {
+            // === FAST PATH: engine is already running — just swap the tap ===
+            log("  step 4-7: engine already running — swapping tap from idle to recording")
 
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
-            guard let self else { return }
-            self.recognitionRequest?.append(buffer)
-            self.updateAudioLevel(buffer: buffer)
-            self.currentTapBufferCount += 1
-            // Log first buffer arrival — proves the engine actually started capturing
-            if self.currentTapBufferCount == 1 {
-                let elapsed = Date().timeIntervalSince(self.currentRecordingStartTime)
-                self.log("  🎤 first audio buffer after \(String(format: "%.2f", elapsed))s")
+            engine.inputNode.removeTap(onBus: 0)
+            let format = engine.inputNode.outputFormat(forBus: 0)
+
+            engine.inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+                guard let self else { return }
+                self.recognitionRequest?.append(buffer)
+                self.updateAudioLevel(buffer: buffer)
+                self.currentTapBufferCount += 1
+                if self.currentTapBufferCount == 1 {
+                    let elapsed = Date().timeIntervalSince(self.currentRecordingStartTime)
+                    self.log("  🎤 first audio buffer after \(String(format: "%.2f", elapsed))s")
+                }
             }
-        }
 
-        engine.prepare()
-        log("  step 7: engine.start()...")
-        do {
-            try engine.start()
-            // Post the ACK IMMEDIATELY so the keyboard UI locks in the recording
-            // toolbar. The audio engine takes ~50-150ms to start emitting buffers,
-            // but the recognition task is already attached and will receive them
-            // as soon as they arrive. The user's first word may be slightly
-            // clipped but won't be lost entirely because the input tap queues
-            // buffers as soon as the engine is running.
-            log("✅ RECORDING STARTED — engine.isRunning=\(engine.isRunning), posting recordingStarted ACK")
+            log("✅ RECORDING STARTED (tap-swap, no engine restart) — posting recordingStarted ACK")
             updateLiveActivity(isRecording: true)
             darwin.post(DarwinNotificationName.recordingStarted)
-        } catch {
-            let nsErr = error as NSError
-            log("❌ BLOCK: engine.start() threw: code=\(nsErr.code) \(error.localizedDescription)")
-            defaults.isRecording = false
-            await MainActor.run { self.isCurrentlyRecording = false }
-            recognitionTask?.cancel()
-            recognitionTask = nil
-            recognitionRequest = nil
-            // The hardware is locked (often OSStatus 2003329396 — kAUStartIO
-            // refused, meaning another audio unit owns the mic). Retrying
-            // from background won't clear this — only foregrounding the app
-            // can fully release the Audio Unit graph. Signal death to the
-            // keyboard so it shows "Start ST" and the user can recover.
-            audioSessionConfigured = false
-            audioEngine = nil
-            defaults.heartbeat = nil
-            emitRecordingFailed()
+
+        } else {
+            // === SLOW PATH: engine not running — full create+start (foreground only) ===
+            log("  step 4: no running engine — creating fresh AVAudioEngine (foreground path)")
+
+            let engine = AVAudioEngine()
+            self.audioEngine = engine
+            let inputNode = engine.inputNode
+            let format = inputNode.outputFormat(forBus: 0)
+
+            inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+                guard let self else { return }
+                self.recognitionRequest?.append(buffer)
+                self.updateAudioLevel(buffer: buffer)
+                self.currentTapBufferCount += 1
+                if self.currentTapBufferCount == 1 {
+                    let elapsed = Date().timeIntervalSince(self.currentRecordingStartTime)
+                    self.log("  🎤 first audio buffer after \(String(format: "%.2f", elapsed))s")
+                }
+            }
+
+            engine.prepare()
+            log("  step 7: engine.start() (slow path)...")
+            do {
+                try engine.start()
+                log("✅ RECORDING STARTED (new engine) — posting recordingStarted ACK")
+                updateLiveActivity(isRecording: true)
+                darwin.post(DarwinNotificationName.recordingStarted)
+            } catch {
+                let nsErr = error as NSError
+                log("❌ BLOCK: engine.start() threw: code=\(nsErr.code) \(error.localizedDescription)")
+                defaults.isRecording = false
+                await MainActor.run { self.isCurrentlyRecording = false }
+                recognitionTask?.cancel()
+                recognitionTask = nil
+                recognitionRequest = nil
+                audioSessionConfigured = false
+                audioEngine = nil
+                defaults.heartbeat = nil
+                emitRecordingFailed()
+            }
         }
     }
 
@@ -1124,7 +1146,11 @@ final class BackgroundDictationService: ObservableObject {
 
         let elapsed = Date().timeIntervalSince(currentRecordingStartTime)
         log("⏹ Stopping recording after \(String(format: "%.2f", elapsed))s (bufferCount=\(currentTapBufferCount) partials=\(currentPartialResultCount) currentTranscript='\(currentTranscript.prefix(40))')")
-        stopEngine()
+
+        // Swap the recording tap back to the idle tap — keep the engine running
+        // so the audio hardware isn't released. This is what prevents error
+        // 2003329396 on the next recording from background.
+        swapToIdleTap()
         recognitionRequest?.endAudio()
 
         defaults.audioLevel = 0
@@ -1138,11 +1164,6 @@ final class BackgroundDictationService: ObservableObject {
         Task { [weak self] in
             guard let self else { return }
 
-            // Wait for the recognizer to produce a final result. The old
-            // fixed 500ms delay missed slow-recognizer cases where the first
-            // partial didn't arrive until 2+ seconds after endAudio(). The
-            // poll checks every 100ms, exits as soon as isFinal fires, and
-            // caps at 3s so we never hang.
             let maxWaitMs = 3000
             var waited = 0
             while waited < maxWaitMs {
@@ -1174,7 +1195,7 @@ final class BackgroundDictationService: ObservableObject {
                 self.log("Empty transcript after \(waited)ms wait")
             }
 
-            self.startIdleAudioEngine()
+            // Engine stays running with idle tap — no startIdleAudioEngine() needed
         }
     }
 
@@ -1184,15 +1205,31 @@ final class BackgroundDictationService: ObservableObject {
         guard isCurrentlyRecording else { return }
 
         log("Canceling recording (discard)")
-        stopEngine()
+        // Swap back to idle tap — keep engine running
+        swapToIdleTap()
         cleanupRecording()
         defaults.audioLevel = 0
         previousAudioLevel = 0
 
-        // Restart idle engine immediately — no delay
-        startIdleAudioEngine()
         updateLiveActivity(isRecording: false)
-        log("Cancel complete, idle engine restarted")
+        log("Cancel complete, swapped back to idle tap")
+    }
+
+    /// Swap the current input tap back to the "discard audio" idle tap.
+    /// Keeps the engine running so the audio hardware isn't released.
+    /// This is the counterpart to the "swap to recording tap" path in startRecordingAsync.
+    private func swapToIdleTap() {
+        guard let engine = audioEngine, engine.isRunning else {
+            log("swapToIdleTap: engine not running — falling back to startIdleAudioEngine")
+            startIdleAudioEngine()
+            return
+        }
+        engine.inputNode.removeTap(onBus: 0)
+        let format = engine.inputNode.outputFormat(forBus: 0)
+        engine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: format) { _, _ in
+            // Discard audio — just keeping the session alive
+        }
+        log("Swapped back to idle tap (engine still running)")
     }
 
     // MARK: - Helpers
