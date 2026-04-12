@@ -73,9 +73,7 @@ struct StopTypingWidgetLiveActivity: Widget {
                     .foregroundStyle(.purple)
 
             } compactTrailing: {
-                Image(systemName: "waveform")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(.purple)
+                EmptyView()
 
             } minimal: {
                 Image(systemName: "waveform")
