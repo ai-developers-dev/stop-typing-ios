@@ -47,6 +47,11 @@ final class BackgroundDictationService: ObservableObject {
     /// Without this guard, the second rebuild tears down the engine the
     /// first one just built, leaving the pipeline half-broken.
     private var rebuildInProgress = false
+    /// Re-entry guard for reactivateAudioPipeline. Same reasoning as
+    /// rebuildInProgress — also cross-checked against rebuildInProgress so
+    /// reactivate never runs in parallel with a rebuild (the race that
+    /// produced the "two idle engines, hardware locked" bug).
+    private var reactivateInProgress = false
     /// Debounce for reactivateAudioPipeline so handleForeground +
     /// DictationOverlayView.onAppear don't both trigger full pipeline
     /// restarts in parallel when the user returns to the app.
@@ -74,16 +79,16 @@ final class BackgroundDictationService: ObservableObject {
     func activateSession() {
         log("🟢 activateSession() called — inMemory.isSessionActive=\(isSessionActive) defaults.sessionActive=\(defaults.sessionActive) defaults.isRecording=\(defaults.isRecording)")
 
-        // If already active, just write a fresh heartbeat and debounced-refresh.
-        // The full rebuild (if needed) is owned by handleForeground, which
-        // fires on scenePhase .active BEFORE DictationOverlayView.onAppear
-        // calls us. Having both paths trigger a rebuild caused a race where
-        // the second rebuild tore down what the first just built, leaving
-        // the pipeline in a half-broken state.
+        // If already active, write a fresh heartbeat and bail. handleForeground
+        // (fired by scenePhase .active BEFORE DictationOverlayView.onAppear
+        // calls us) owns the pipeline refresh/rebuild path. Calling
+        // reactivateAudioPipeline here raced with handleForeground's rebuild
+        // and created a second idle engine in parallel — the orphan held
+        // the mic hardware and made later engine.start() calls fail with
+        // OSStatus 2003329396 ('what' — kAUStartIO refused).
         if isSessionActive {
-            log("  session already active (in-memory) — writing heartbeat + debounced reactivate (handleForeground owns the rebuild path)")
+            log("  session already active (in-memory) — writing heartbeat only (handleForeground owns refresh)")
             defaults.writeHeartbeat()
-            reactivateAudioPipeline()
             return
         }
 
@@ -472,11 +477,25 @@ final class BackgroundDictationService: ObservableObject {
 
     /// Self-healing audio pipeline restart. Safe to call repeatedly.
     /// Reactivates AVAudioSession and restarts the idle engine from scratch.
-    /// Debounced so parallel callers (handleForeground + DictationOverlayView.onAppear)
-    /// don't double-run the audio config.
+    /// Cross-guarded against rebuildAudioPipelineFromScratch so the two
+    /// never run in parallel.
     private func reactivateAudioPipeline() {
         if isCurrentlyRecording {
             log("reactivateAudioPipeline: skipping (recording in progress)")
+            return
+        }
+
+        // CRITICAL: never run alongside a rebuild. Prior to this guard,
+        // activateSession's already-active branch called reactivate while
+        // handleForeground called rebuild, creating TWO idle engines in
+        // parallel. The orphaned one held the mic hardware and later caused
+        // engine.start() to fail with OSStatus 2003329396 (kAUStartIO refused).
+        if rebuildInProgress {
+            log("reactivateAudioPipeline: skipping (rebuild in progress)")
+            return
+        }
+        if reactivateInProgress {
+            log("reactivateAudioPipeline: skipping (another reactivate in progress)")
             return
         }
 
@@ -486,9 +505,12 @@ final class BackgroundDictationService: ObservableObject {
             return
         }
         lastReactivation = now
+        reactivateInProgress = true
 
         Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
+            defer { self.reactivateInProgress = false }
+
             let ok = await self.setupAudioSessionWithRetry(attempts: 2, backoffMs: 200)
             guard ok else {
                 self.log("reactivateAudioPipeline: audio session setup failed — zeroing heartbeat so keyboard shows 'Start ST' CTA")
@@ -607,6 +629,18 @@ final class BackgroundDictationService: ObservableObject {
         if rebuildInProgress {
             log("🔨 rebuildAudioPipelineFromScratch: ALREADY IN PROGRESS — skipping duplicate call")
             return
+        }
+        // Cross-guard: if reactivate is mid-flight, wait for it to finish
+        // rather than stomping on its in-progress setActive. Poll briefly
+        // (reactivate's work is ~200-500ms). Without this, rebuild's
+        // setActive(false) would tear down the session reactivate just built.
+        var waitedMs = 0
+        while reactivateInProgress && waitedMs < 1500 {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            waitedMs += 50
+        }
+        if reactivateInProgress {
+            log("🔨 rebuildAudioPipelineFromScratch: reactivate still in flight after 1.5s — proceeding anyway")
         }
         rebuildInProgress = true
         defer { rebuildInProgress = false }
@@ -959,13 +993,21 @@ final class BackgroundDictationService: ObservableObject {
             updateLiveActivity(isRecording: true)
             darwin.post(DarwinNotificationName.recordingStarted)
         } catch {
-            log("❌ BLOCK: engine.start() threw: \(error.localizedDescription)")
+            let nsErr = error as NSError
+            log("❌ BLOCK: engine.start() threw: code=\(nsErr.code) \(error.localizedDescription)")
             defaults.isRecording = false
             await MainActor.run { self.isCurrentlyRecording = false }
             recognitionTask?.cancel()
             recognitionTask = nil
             recognitionRequest = nil
-            startIdleAudioEngine()
+            // The hardware is locked (often OSStatus 2003329396 — kAUStartIO
+            // refused, meaning another audio unit owns the mic). Retrying
+            // from background won't clear this — only foregrounding the app
+            // can fully release the Audio Unit graph. Signal death to the
+            // keyboard so it shows "Start ST" and the user can recover.
+            audioSessionConfigured = false
+            audioEngine = nil
+            defaults.heartbeat = nil
             emitRecordingFailed()
         }
     }
