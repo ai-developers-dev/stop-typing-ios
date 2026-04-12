@@ -62,9 +62,9 @@ struct StopTypingWidgetLiveActivity: Widget {
                 }
 
                 DynamicIslandExpandedRegion(.trailing) {
-                    Image(systemName: context.state.isRecording ? "mic.fill" : "mic")
-                        .font(.system(size: 18))
-                        .foregroundStyle(context.state.isRecording ? .red : .secondary)
+                    Image(systemName: "waveform")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(.purple)
                 }
 
             } compactLeading: {
@@ -73,9 +73,9 @@ struct StopTypingWidgetLiveActivity: Widget {
                     .foregroundStyle(.purple)
 
             } compactTrailing: {
-                Image(systemName: context.state.isRecording ? "mic.fill" : "mic")
-                    .font(.system(size: 12))
-                    .foregroundStyle(context.state.isRecording ? .red : .secondary)
+                Image(systemName: "waveform")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.purple)
 
             } minimal: {
                 Image(systemName: "waveform")

@@ -65,22 +65,20 @@ struct StopTypingLiveActivity: Widget {
                 }
 
                 DynamicIslandExpandedRegion(.trailing) {
-                    Image(systemName: context.state.isRecording ? "mic.fill" : "mic")
-                        .font(.system(size: 18))
-                        .foregroundStyle(context.state.isRecording ? .red : .secondary)
+                    Image(systemName: "waveform")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(.purple)
                 }
 
             } compactLeading: {
-                // Small logo in compact Dynamic Island — left side
                 Image(systemName: "waveform")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(.purple)
 
             } compactTrailing: {
-                // Recording indicator — right side
-                Image(systemName: context.state.isRecording ? "mic.fill" : "mic")
-                    .font(.system(size: 12))
-                    .foregroundStyle(context.state.isRecording ? .red : .secondary)
+                Image(systemName: "waveform")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.purple)
 
             } minimal: {
                 // When multiple Live Activities — just the logo
