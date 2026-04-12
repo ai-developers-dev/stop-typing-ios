@@ -28,11 +28,9 @@ final class AppleSpeechService: TranscriptionService, ObservableObject {
             throw TranscriptionError.requestCreationFailed
         }
         recognitionRequest.shouldReportPartialResults = true
-
-        // On-device recognition when available (iOS 13+)
-        if speechRecognizer.supportsOnDeviceRecognition {
-            recognitionRequest.requiresOnDeviceRecognition = true
-        }
+        // Let Apple choose the best backend — server is ~4x faster for first
+        // partial result (~300ms vs ~1300ms on-device). Apple falls back to
+        // on-device automatically when there's no internet.
 
         // Start recognition task
         currentTranscript = ""

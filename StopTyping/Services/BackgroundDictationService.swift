@@ -948,9 +948,12 @@ final class BackgroundDictationService: ObservableObject {
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
-        if recognizer.supportsOnDeviceRecognition {
-            request.requiresOnDeviceRecognition = true
-        }
+        // Do NOT force on-device recognition. On-device takes ~1.3 seconds to
+        // produce the first partial result, which means short recordings (1-2s)
+        // only capture the tail-end of speech. Server-based recognition produces
+        // first partials in ~300ms. Apple will use on-device automatically when
+        // there's no internet, so we get the best of both worlds.
+        // request.requiresOnDeviceRecognition = true  // REMOVED — was causing wrong/missing words
         recognitionRequest = request
 
         recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
@@ -1147,16 +1150,22 @@ final class BackgroundDictationService: ObservableObject {
         let elapsed = Date().timeIntervalSince(currentRecordingStartTime)
         log("⏹ Stopping recording after \(String(format: "%.2f", elapsed))s (bufferCount=\(currentTapBufferCount) partials=\(currentPartialResultCount) currentTranscript='\(currentTranscript.prefix(40))')")
 
-        // Swap the recording tap back to the idle tap — keep the engine running
-        // so the audio hardware isn't released. This is what prevents error
-        // 2003329396 on the next recording from background.
-        swapToIdleTap()
+        // DON'T swap taps immediately — keep feeding audio to the recognizer
+        // for a brief grace period. The speech recognizer needs time after the
+        // last word to produce its final result. Swapping the tap immediately
+        // cuts off the audio pipeline and the recognizer only gets whatever was
+        // already in its internal buffer. With on-device recognition, first
+        // partials don't arrive until ~1.3s — if the user recorded for 1.5s
+        // and we swap immediately, the recognizer only has 0.2s of decoded audio.
+        //
+        // Tell the recognizer no more audio is coming. It will flush its buffers
+        // and produce a final result. The tap stays active briefly to catch any
+        // remaining audio callbacks in flight.
         recognitionRequest?.endAudio()
 
+        // Update UI immediately so the user sees "done" state
         defaults.audioLevel = 0
         previousAudioLevel = 0
-
-        // Update Live Activity and recording state immediately — don't wait for transcript processing
         defaults.isRecording = false
         DispatchQueue.main.async { self.isCurrentlyRecording = false }
         updateLiveActivity(isRecording: false)
@@ -1195,7 +1204,10 @@ final class BackgroundDictationService: ObservableObject {
                 self.log("Empty transcript after \(waited)ms wait")
             }
 
-            // Engine stays running with idle tap — no startIdleAudioEngine() needed
+            // NOW swap back to idle tap — the recognizer is done processing.
+            // The recording tap was kept active during the ASR wait so the
+            // recognizer could continue receiving audio buffers in flight.
+            self.swapToIdleTap()
         }
     }
 
