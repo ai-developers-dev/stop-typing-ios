@@ -37,12 +37,16 @@ final class GroqService {
         - NEVER respond conversationally
         - NEVER add your own words or thoughts
         - NEVER change the speaker's intent or meaning
-        - If the speaker corrects themselves ("no I mean", "actually", "scratch that"), \
-        apply the correction and remove the original
-        - Remove filler words: um, uh, like, you know, so basically
+        - If the speaker corrects themselves ("no I mean", "actually", "scratch that", \
+        "no make it", "no wait"), apply the correction and remove the original. \
+        Keep ONLY the final corrected version.
+        - Remove filler words: um, uh, like, you know, so basically, well
         - Add proper punctuation: periods, commas, question marks, exclamation points
-        - Use exclamation points for excited/emotional statements
-        - Fix contractions: dont → don't, cant → can't, im → I'm
+        - Use question marks for ANY question, even indirect ("can you", "would you", "do you")
+        - Use exclamation points for excited, urgent, or emotional statements
+        - Use commas for natural pauses, lists, and clause separation
+        - Fix contractions: dont → don't, cant → can't, im → I'm, wont → won't
+        - Handle numbers naturally: "five" → 5, "six hundred" → 600 (use digits)
 
         ## Output Format
         Return JSON only: {"text": "<corrected text>"}
@@ -72,6 +76,21 @@ final class GroqService {
 
         Input: "i am so excited about this"
         Output: {"text": "I am so excited about this!"}
+
+        Input: "give me 5 pair no make it 6"
+        Output: {"text": "Give me 6 pair."}
+
+        Input: "can you send that over by um end of day today"
+        Output: {"text": "Can you send that over by end of day today?"}
+
+        Input: "that is just unbelievable i cant believe they did that"
+        Output: {"text": "That is just unbelievable! I can't believe they did that!"}
+
+        Input: "so we need to order like 12 units and then also get the uh warranty on each one"
+        Output: {"text": "We need to order 12 units and then also get the warranty on each one."}
+
+        Input: "wait no actually scratch that lets go with plan b instead"
+        Output: {"text": "Let's go with plan B instead."}
         """
 
     private init() {}
@@ -92,13 +111,39 @@ final class GroqService {
         }
 
         SharedDefaults.shared.appendLog("APP: Groq cleanup (\(wordCount) words)...")
+        SharedDefaults.shared.appendLog("APP: 📝 GROQ_IN: \(trimmed.prefix(200))")
 
         do {
             let cleaned = try await callGroq(trimmed)
-            SharedDefaults.shared.appendLog("APP: Groq done: '\(cleaned.prefix(60))...'")
+            SharedDefaults.shared.appendLog("APP: ✅ GROQ_OUT: \(cleaned.prefix(200))")
+
+            // Quality audit: flag suspicious outputs for daily review
+            let inputLower = trimmed.lowercased()
+            let outputLower = cleaned.lowercased()
+
+            // Check if self-correction was applied (user said "no" / "actually" / "wait")
+            let hasCorrectionCue = ["no make it", "no wait", "actually", "scratch that", "i mean", "no i said"].contains(where: { inputLower.contains($0) })
+            if hasCorrectionCue {
+                SharedDefaults.shared.appendLog("APP: 🔍 GROQ_AUDIT: self-correction detected in input — verify output applied it")
+            }
+
+            // Check if output looks like a conversational response instead of cleaned text
+            let conversationalPrefixes = ["sure", "of course", "here", "i'd be happy", "certainly", "i can"]
+            let looksConversational = conversationalPrefixes.contains(where: { outputLower.hasPrefix($0) })
+            let inputAlsoStartedThatWay = conversationalPrefixes.contains(where: { inputLower.hasPrefix($0) })
+            if looksConversational && !inputAlsoStartedThatWay {
+                SharedDefaults.shared.appendLog("APP: ⚠️ GROQ_AUDIT: output looks conversational — prompt may have leaked")
+            }
+
+            // Check punctuation quality
+            let hasPunctuation = cleaned.contains(where: { ".!?".contains($0) })
+            if !hasPunctuation && wordCount > 5 {
+                SharedDefaults.shared.appendLog("APP: ⚠️ GROQ_AUDIT: no punctuation in \(wordCount)-word output")
+            }
+
             return cleaned
         } catch {
-            SharedDefaults.shared.appendLog("APP: Groq FAILED: \(error.localizedDescription) — using quick clean")
+            SharedDefaults.shared.appendLog("APP: ❌ GROQ_FAIL: \(error.localizedDescription) — using quick clean")
             return quickClean(trimmed)
         }
     }

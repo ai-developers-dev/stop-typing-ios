@@ -41,6 +41,17 @@ final class BackgroundDictationService: ObservableObject {
     /// audio priority, so we skip that call in startRecordingAsync when this is
     /// already true — the session is still configured from the foreground setup.
     private var audioSessionConfigured = false
+    /// When audioSessionConfigured was last set to true. Used by handleForeground
+    /// to detect sessions that have been "configured" for too long without a
+    /// refresh — iOS can silently invalidate them during suspension.
+    private var audioSessionConfiguredAt: Date = .distantPast
+    /// Player node that outputs silence through the speaker. This is the
+    /// standard iOS pattern for keeping an app alive in background with the
+    /// `audio` UIBackgroundMode: iOS only honours background audio when the
+    /// app has *active audio output*, not just an input tap. Without this,
+    /// iOS suspends the process after ~10-30s, killing the heartbeat timer
+    /// and making the keyboard fall back to "Start ST".
+    private var silencePlayerNode: AVAudioPlayerNode?
     /// Re-entry guard for rebuildAudioPipelineFromScratch. Multiple callers
     /// (scenePhase.active → handleForeground, URL scheme → activateSession,
     /// mediaServicesReset, etc.) can race into a rebuild simultaneously.
@@ -392,6 +403,7 @@ final class BackgroundDictationService: ObservableObject {
                     log("    audio setup attempt \(attempt): ✓ \(configName)")
                     logCurrentRoute(session: session, tag: "after \(configName)")
                     audioSessionConfigured = true
+                    audioSessionConfiguredAt = Date()
                     return true
                 } catch {
                     let nsErr = error as NSError
@@ -538,8 +550,9 @@ final class BackgroundDictationService: ObservableObject {
         log("App entering background — session stays active")
 
         // Session stays active, Live Activity stays visible, sessionActive stays true.
-        // The heartbeat timer will be suspended by iOS automatically — that's fine
-        // because the keyboard now checks sessionActive (not heartbeat) to decide state.
+        // The heartbeat timer continues running because the silence-output keepalive
+        // prevents iOS from suspending the process. The keyboard checks heartbeat
+        // freshness (isAppAlive) to decide whether to show the mic button or "Start ST".
 
         // If actively recording, clean up since the audio engine will be suspended
         if isCurrentlyRecording {
@@ -591,17 +604,35 @@ final class BackgroundDictationService: ObservableObject {
         }
 
         // Decide whether to do the full rebuild or just a lightweight refresh.
-        // Full rebuild is needed when the session is stale (audioSessionConfigured==false)
-        // OR the idle engine is dead. When we're in foreground, setCategory/setActive
-        // is actually allowed by iOS, so the rebuild can succeed.
+        // Full rebuild is needed when:
+        //   1. audioSessionConfigured is false (session known to be stale)
+        //   2. The idle engine is dead
+        //   3. The heartbeat was stale (>30s old) — this means iOS suspended
+        //      our process, which silently deactivates the AVAudioSession.
+        //      The in-memory audioSessionConfigured flag survives suspension
+        //      but the actual session is dead. After any suspension, we MUST
+        //      do a full rebuild, not a lightweight refresh.
+        //   4. audioSessionConfigured has been true for >5 minutes — even if
+        //      the engine appears running, the session may have been silently
+        //      invalidated by iOS.
         let idleEngineRunning = audioEngine?.isRunning == true
-        if !audioSessionConfigured || !idleEngineRunning {
-            log("  → rebuildAudioPipelineFromScratch (audioSessionConfigured=\(audioSessionConfigured), idleEngineRunning=\(idleEngineRunning))")
+        let heartbeatAge = defaults.heartbeat.map { Date().timeIntervalSince($0) } ?? .infinity
+        let heartbeatWasStale = heartbeatAge > 30.0
+        let sessionConfigAge = Date().timeIntervalSince(audioSessionConfiguredAt)
+        let sessionConfigStale = sessionConfigAge > 300.0  // 5 minutes
+
+        let needsFullRebuild = !audioSessionConfigured
+            || !idleEngineRunning
+            || heartbeatWasStale
+            || sessionConfigStale
+
+        if needsFullRebuild {
+            log("  → rebuildAudioPipelineFromScratch (audioSessionConfigured=\(audioSessionConfigured), idleEngineRunning=\(idleEngineRunning), heartbeatAge=\(String(format: "%.1f", heartbeatAge))s, sessionConfigAge=\(String(format: "%.0f", sessionConfigAge))s)")
             Task.detached(priority: .userInitiated) { [weak self] in
                 await self?.rebuildAudioPipelineFromScratch()
             }
         } else {
-            log("  → pipeline looks healthy, debounced refresh only")
+            log("  → pipeline looks healthy (heartbeat \(String(format: "%.1f", heartbeatAge))s old), debounced refresh only")
             reactivateAudioPipeline()
         }
 
@@ -649,7 +680,9 @@ final class BackgroundDictationService: ObservableObject {
         log("🔨 rebuildAudioPipelineFromScratch: starting (audioSessionConfigured=\(audioSessionConfigured), idleEngineRunning=\(audioEngine?.isRunning == true))")
         await MainActor.run { self.pipelineStatus = .rebuilding }
 
-        // 1. Stop current engine, remove taps
+        // 1. Stop current engine, remove taps, release silence player
+        silencePlayerNode?.stop()
+        silencePlayerNode = nil
         if let engine = audioEngine {
             if engine.isRunning {
                 engine.inputNode.removeTap(onBus: 0)
@@ -775,20 +808,43 @@ final class BackgroundDictationService: ObservableObject {
             engine.inputNode.removeTap(onBus: 0)
             engine.stop()
         }
+        silencePlayerNode?.stop()
+        silencePlayerNode = nil
 
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
 
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: format) { _, _ in
-            // Discard audio — just keeping the session alive
+            // Discard audio — just keeping the mic hardware warm
         }
+
+        // Attach a player node that loops silence through the speaker output.
+        // iOS only keeps apps alive in background when they have active audio
+        // OUTPUT — an input-only tap is not enough. Playing inaudible silence
+        // (volume ≈ 0) satisfies the background-audio entitlement check without
+        // producing any audible sound or meaningful battery drain.
+        let player = AVAudioPlayerNode()
+        engine.attach(player)
+        let outputFormat = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1)!
+        engine.connect(player, to: engine.mainMixerNode, format: outputFormat)
+        // Near-zero volume so nothing is audible, but the output path is active
+        engine.mainMixerNode.outputVolume = 0.01
 
         engine.prepare()
         do {
             try engine.start()
+
+            // Schedule a 1-second silent buffer on infinite loop
+            let silenceBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: 48000)!
+            silenceBuffer.frameLength = silenceBuffer.frameCapacity
+            // Buffer data is already zeroed = pure silence
+            player.play()
+            player.scheduleBuffer(silenceBuffer, at: nil, options: .loops)
+
             self.audioEngine = engine
-            log("Idle engine started")
+            self.silencePlayerNode = player
+            log("Idle engine started (with silence output for background keepalive)")
         } catch {
             log("Idle engine FAILED: \(error)")
         }
@@ -800,6 +856,8 @@ final class BackgroundDictationService: ObservableObject {
         log("Deactivating session")
         endLiveActivity()
         cleanupRecording()
+        silencePlayerNode?.stop()
+        silencePlayerNode = nil
         if let engine = audioEngine, engine.isRunning {
             engine.inputNode.removeTap(onBus: 0)
             engine.stop()
@@ -972,6 +1030,18 @@ final class BackgroundDictationService: ObservableObject {
             }
             if let error {
                 self.log("Recognition error: \(error.localizedDescription)")
+                // If recognition fails AND we never got a final result, the
+                // audio session is likely dead (stale after suspension). Reset
+                // recording state and notify the keyboard so it doesn't stay
+                // stuck on "Listening..." forever.
+                if !self.recognitionIsFinal && self.isCurrentlyRecording {
+                    self.log("⚠️ Recognition failed without final result — resetting recording state")
+                    self.defaults.isRecording = false
+                    self.defaults.audioLevel = 0
+                    self.audioSessionConfigured = false
+                    DispatchQueue.main.async { self.isCurrentlyRecording = false }
+                    self.emitRecordingFailed()
+                }
             }
         }
 
@@ -996,6 +1066,26 @@ final class BackgroundDictationService: ObservableObject {
             log("✅ RECORDING STARTED (tap-swap, no engine restart) — posting recordingStarted ACK")
             updateLiveActivity(isRecording: true)
             darwin.post(DarwinNotificationName.recordingStarted)
+
+            // Buffer watchdog: if no audio buffers arrive within 3 seconds of
+            // starting, the audio session is dead (iOS silently deactivated it
+            // during suspension). Without this, the keyboard shows "Listening"
+            // forever with no audio and no error feedback.
+            let startBufferCount = self.currentTapBufferCount
+            Task.detached { [weak self] in
+                try? await Task.sleep(nanoseconds: 3_000_000_000)  // 3 seconds
+                guard let self else { return }
+                if self.isCurrentlyRecording && self.currentTapBufferCount == startBufferCount {
+                    self.log("⚠️ BUFFER WATCHDOG: zero audio buffers after 3s — audio session is dead, aborting recording")
+                    self.audioSessionConfigured = false
+                    self.defaults.isRecording = false
+                    self.defaults.audioLevel = 0
+                    await MainActor.run { self.isCurrentlyRecording = false }
+                    self.emitRecordingFailed()
+                    // Trigger a full rebuild so the next attempt works
+                    await self.rebuildAudioPipelineFromScratch()
+                }
+            }
 
         } else {
             // === SLOW PATH: engine not running — full create+start (foreground only) ===
@@ -1239,9 +1329,26 @@ final class BackgroundDictationService: ObservableObject {
         engine.inputNode.removeTap(onBus: 0)
         let format = engine.inputNode.outputFormat(forBus: 0)
         engine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: format) { _, _ in
-            // Discard audio — just keeping the session alive
+            // Discard audio — just keeping the mic hardware warm
         }
-        log("Swapped back to idle tap (engine still running)")
+        // Ensure silence output is running for background keepalive.
+        // The silence player may be missing if the engine was created via the
+        // slow path in startRecordingAsync (which doesn't attach one).
+        if silencePlayerNode == nil || !(silencePlayerNode?.isPlaying ?? false) {
+            let player = AVAudioPlayerNode()
+            engine.attach(player)
+            let outputFormat = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1)!
+            engine.connect(player, to: engine.mainMixerNode, format: outputFormat)
+            engine.mainMixerNode.outputVolume = 0.01
+            let silenceBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: 48000)!
+            silenceBuffer.frameLength = silenceBuffer.frameCapacity
+            player.play()
+            player.scheduleBuffer(silenceBuffer, at: nil, options: .loops)
+            silencePlayerNode = player
+            log("Swapped back to idle tap + attached silence player (engine still running)")
+        } else {
+            log("Swapped back to idle tap (engine still running, silence player already active)")
+        }
     }
 
     // MARK: - Helpers
