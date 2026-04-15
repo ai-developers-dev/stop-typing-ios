@@ -62,9 +62,9 @@ struct StopTypingWidgetLiveActivity: Widget {
                 }
 
                 DynamicIslandExpandedRegion(.trailing) {
-                    Image(systemName: "waveform")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(.purple)
+                    Text(context.state.mode)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
                 }
 
             } compactLeading: {

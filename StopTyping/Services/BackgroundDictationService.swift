@@ -170,6 +170,7 @@ final class BackgroundDictationService: ObservableObject {
             // Route/config change means the session may be in a limbo state.
             // Force full re-setup on next startRecording.
             self.audioSessionConfigured = false
+            self.audioSessionConfiguredAt = .distantPast
             self.reactivateAudioPipeline()
         }
 
@@ -190,6 +191,7 @@ final class BackgroundDictationService: ObservableObject {
             guard let self else { return }
             self.log("🚨 mediaServicesWereReset — session is toast, marking stale and zeroing heartbeat")
             self.audioSessionConfigured = false
+            self.audioSessionConfiguredAt = .distantPast
             self.defaults.heartbeat = nil
         }
 
@@ -201,6 +203,7 @@ final class BackgroundDictationService: ObservableObject {
             guard let self else { return }
             self.log("🚨 mediaServicesWereLost — session is toast, marking stale and zeroing heartbeat")
             self.audioSessionConfigured = false
+            self.audioSessionConfiguredAt = .distantPast
             self.defaults.heartbeat = nil
         }
 
@@ -252,7 +255,16 @@ final class BackgroundDictationService: ObservableObject {
 
             let timer = DispatchSource.makeTimerSource(queue: .global(qos: .userInitiated))
             timer.schedule(deadline: .now(), repeating: 2.0)
-            timer.setEventHandler { [weak self] in self?.defaults.writeHeartbeat() }
+            var heartbeatCount = 0
+            timer.setEventHandler { [weak self] in
+                guard let self else { return }
+                self.defaults.writeHeartbeat()
+                heartbeatCount += 1
+                // Log Live Activity state every ~30s (every 15th heartbeat)
+                if heartbeatCount % 15 == 0, let activity = self.currentActivity {
+                    self.log("🏝️ Live Activity HEARTBEAT (id=\(activity.id), state=\(activity.activityState))")
+                }
+            }
             timer.resume()
             self.heartbeatTimer = timer
 
@@ -442,7 +454,7 @@ final class BackgroundDictationService: ObservableObject {
 
         // Prefer built-in mic when available (most reliable after stale wake).
         let builtIn = inputs.first { $0.portType == .builtInMic }
-        let target = builtIn ?? inputs.first!
+        guard let target = builtIn ?? inputs.first else { return }
 
         do {
             try session.setPreferredInput(target)
@@ -473,6 +485,7 @@ final class BackgroundDictationService: ObservableObject {
             // MUST re-run setCategory/setActive from scratch — without this flag
             // reset, startRecordingAsync would skip setup and record silence.
             audioSessionConfigured = false
+            audioSessionConfiguredAt = .distantPast
 
         case .ended:
             log("Audio interruption ENDED")
@@ -528,6 +541,7 @@ final class BackgroundDictationService: ObservableObject {
             guard ok else {
                 self.log("reactivateAudioPipeline: audio session setup failed — zeroing heartbeat so keyboard shows 'Start ST' CTA")
                 self.audioSessionConfigured = false
+                self.audioSessionConfiguredAt = .distantPast
                 // Signal to the keyboard that the app is effectively dead.
                 // isAppAlive() checks heartbeat freshness, so clearing it
                 // flips the keyboard to the "Start ST" inactive toolbar
@@ -701,6 +715,7 @@ final class BackgroundDictationService: ObservableObject {
         //      teardown + setCategory/setMode/setActive + forcePreferredBuiltInMic
         //      + route logging, all inside setupAudioSessionWithRetry).
         audioSessionConfigured = false
+        audioSessionConfiguredAt = .distantPast
         let ok = await setupAudioSessionWithRetry(attempts: 3, backoffMs: 200)
         guard ok else {
             log("  🔨 rebuild FAILED at session setup — leaving heartbeat nil so keyboard keeps 'Start ST'")
@@ -764,10 +779,23 @@ final class BackgroundDictationService: ObservableObject {
 
             currentActivity = try Activity.request(
                 attributes: attrs,
-                content: .init(state: state, staleDate: nil),
+                content: .init(state: state, staleDate: Date().addingTimeInterval(3600)),
                 pushType: nil
             )
-            log("Live Activity started (id=\(currentActivity?.id ?? "nil"))")
+            log("🏝️ Live Activity CREATED (id=\(currentActivity?.id ?? "nil"), state=\(String(describing: currentActivity?.activityState)))")
+
+            // Monitor for unexpected state changes (iOS dismissing our activity)
+            if let activity = currentActivity {
+                Task {
+                    for await actState in activity.activityStateUpdates {
+                        self.log("🏝️ Live Activity STATE CHANGED → \(actState) (id=\(activity.id))")
+                        if actState == .dismissed || actState == .ended {
+                            self.log("⚠️ Live Activity was dismissed/ended by iOS — will recreate on next foreground")
+                            await MainActor.run { self.currentActivity = nil }
+                        }
+                    }
+                }
+            }
         } catch {
             log("Live Activity skipped: \(error.localizedDescription)")
             // Non-fatal — session works fine without Live Activity
@@ -778,12 +806,14 @@ final class BackgroundDictationService: ObservableObject {
         guard let activity = currentActivity else { return }
         Task {
             let state = StopTypingWidgetAttributes.ContentState(isRecording: isRecording, mode: "Formal")
-            await activity.update(.init(state: state, staleDate: nil))
+            await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(3600)))
+            self.log("🏝️ Live Activity UPDATED (id=\(activity.id), isRecording=\(isRecording), state=\(activity.activityState))")
         }
     }
 
     private func endLiveActivity() {
         guard let activity = currentActivity else { return }
+        let actId = activity.id
         // Pass an EXPLICIT final ContentState. Calling activity.end(nil, ...)
         // is the canonical "doesn't actually remove the card" bug — iOS keeps
         // the lock screen card visible indefinitely when the final state is
@@ -797,7 +827,7 @@ final class BackgroundDictationService: ObservableObject {
             )
         }
         currentActivity = nil
-        log("Live Activity ended")
+        log("🏝️ Live Activity ENDED (id=\(actId))")
     }
 
     // MARK: - Idle Audio Engine
@@ -826,7 +856,10 @@ final class BackgroundDictationService: ObservableObject {
         // producing any audible sound or meaningful battery drain.
         let player = AVAudioPlayerNode()
         engine.attach(player)
-        let outputFormat = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1)!
+        guard let outputFormat = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1) else {
+            log("❌ Failed to create audio output format")
+            return
+        }
         engine.connect(player, to: engine.mainMixerNode, format: outputFormat)
         // Near-zero volume so nothing is audible, but the output path is active
         engine.mainMixerNode.outputVolume = 0.01
@@ -836,7 +869,10 @@ final class BackgroundDictationService: ObservableObject {
             try engine.start()
 
             // Schedule a 1-second silent buffer on infinite loop
-            let silenceBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: 48000)!
+            guard let silenceBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: 48000) else {
+                log("❌ Failed to create silence buffer")
+                return
+            }
             silenceBuffer.frameLength = silenceBuffer.frameCapacity
             // Buffer data is already zeroed = pure silence
             player.play()
@@ -869,6 +905,7 @@ final class BackgroundDictationService: ObservableObject {
         defaults.clearSession()
         isSessionActive = false
         audioSessionConfigured = false
+        audioSessionConfiguredAt = .distantPast
         try? AVAudioSession.sharedInstance().setActive(false)
     }
 
@@ -956,6 +993,7 @@ final class BackgroundDictationService: ObservableObject {
             if !idleEngineRunning {
                 log("  step 2: idle engine NOT running (audioSessionConfigured=\(audioSessionConfigured)) — session is stale, re-running setup")
                 audioSessionConfigured = false
+                audioSessionConfiguredAt = .distantPast
             } else {
                 log("  step 2: setting up audio session for the first time (retry x3)...")
             }
@@ -1017,7 +1055,9 @@ final class BackgroundDictationService: ObservableObject {
         recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
             guard let self else { return }
             if let result {
-                self.currentTranscript = result.bestTranscription.formattedString
+                DispatchQueue.main.async {
+                    self.currentTranscript = result.bestTranscription.formattedString
+                }
                 self.currentPartialResultCount += 1
                 if self.currentPartialResultCount == 1 {
                     let elapsed = Date().timeIntervalSince(self.currentRecordingStartTime)
@@ -1029,16 +1069,16 @@ final class BackgroundDictationService: ObservableObject {
                 }
             }
             if let error {
-                self.log("Recognition error: \(error.localizedDescription)")
-                // If recognition fails AND we never got a final result, the
-                // audio session is likely dead (stale after suspension). Reset
-                // recording state and notify the keyboard so it doesn't stay
-                // stuck on "Listening..." forever.
-                if !self.recognitionIsFinal && self.isCurrentlyRecording {
-                    self.log("⚠️ Recognition failed without final result — resetting recording state")
+                self.log("Recognition error: \(error.localizedDescription) (isFinal=\(self.recognitionIsFinal), isRecording=\(self.isCurrentlyRecording))")
+                // Reset recording state on ANY error while actively recording,
+                // regardless of whether we got a final result. This prevents the
+                // keyboard from staying stuck on "Listening..." forever.
+                if self.isCurrentlyRecording {
+                    self.log("⚠️ Recognition error while recording — resetting state")
                     self.defaults.isRecording = false
                     self.defaults.audioLevel = 0
                     self.audioSessionConfigured = false
+                    self.audioSessionConfiguredAt = .distantPast
                     DispatchQueue.main.async { self.isCurrentlyRecording = false }
                     self.emitRecordingFailed()
                 }
@@ -1071,20 +1111,23 @@ final class BackgroundDictationService: ObservableObject {
             // starting, the audio session is dead (iOS silently deactivated it
             // during suspension). Without this, the keyboard shows "Listening"
             // forever with no audio and no error feedback.
-            let startBufferCount = self.currentTapBufferCount
+            //
+            // Capture count AFTER the tap is installed and isCurrentlyRecording
+            // is true, so we don't race with early buffer arrivals.
+            let watchdogBufferCount = self.currentTapBufferCount
             Task.detached { [weak self] in
                 try? await Task.sleep(nanoseconds: 3_000_000_000)  // 3 seconds
                 guard let self else { return }
-                if self.isCurrentlyRecording && self.currentTapBufferCount == startBufferCount {
-                    self.log("⚠️ BUFFER WATCHDOG: zero audio buffers after 3s — audio session is dead, aborting recording")
-                    self.audioSessionConfigured = false
-                    self.defaults.isRecording = false
-                    self.defaults.audioLevel = 0
-                    await MainActor.run { self.isCurrentlyRecording = false }
-                    self.emitRecordingFailed()
-                    // Trigger a full rebuild so the next attempt works
-                    await self.rebuildAudioPipelineFromScratch()
-                }
+                // Only fire if still recording AND no buffers arrived since we started
+                guard self.isCurrentlyRecording,
+                      self.currentTapBufferCount == watchdogBufferCount else { return }
+                self.log("⚠️ BUFFER WATCHDOG: zero audio buffers after 3s — audio session is dead, aborting recording")
+                self.audioSessionConfigured = false
+                self.audioSessionConfiguredAt = .distantPast
+                self.defaults.isRecording = false
+                self.defaults.audioLevel = 0
+                await MainActor.run { self.isCurrentlyRecording = false }
+                self.emitRecordingFailed()
             }
 
         } else {
@@ -1123,6 +1166,7 @@ final class BackgroundDictationService: ObservableObject {
                 recognitionTask = nil
                 recognitionRequest = nil
                 audioSessionConfigured = false
+                audioSessionConfiguredAt = .distantPast
                 audioEngine = nil
                 defaults.heartbeat = nil
                 emitRecordingFailed()
@@ -1337,10 +1381,13 @@ final class BackgroundDictationService: ObservableObject {
         if silencePlayerNode == nil || !(silencePlayerNode?.isPlaying ?? false) {
             let player = AVAudioPlayerNode()
             engine.attach(player)
-            let outputFormat = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1)!
+            guard let outputFormat = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1),
+                  let silenceBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: 48000) else {
+                log("❌ Failed to create silence player format/buffer")
+                return
+            }
             engine.connect(player, to: engine.mainMixerNode, format: outputFormat)
             engine.mainMixerNode.outputVolume = 0.01
-            let silenceBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: 48000)!
             silenceBuffer.frameLength = silenceBuffer.frameCapacity
             player.play()
             player.scheduleBuffer(silenceBuffer, at: nil, options: .loops)

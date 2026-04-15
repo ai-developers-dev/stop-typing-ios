@@ -8,6 +8,17 @@ struct StopTypingApp: App {
     @State private var didWarmUp = false
     @Environment(\.scenePhase) private var scenePhase
 
+    init() {
+        // Clear stale recording state from a prior crash. If the app was
+        // killed while recording, isRecording stays true in SharedDefaults.
+        // Without this, the keyboard briefly shows "Listening" on next launch.
+        let defaults = SharedDefaults.shared
+        if defaults.isRecording {
+            defaults.isRecording = false
+            defaults.audioLevel = 0
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             ZStack {

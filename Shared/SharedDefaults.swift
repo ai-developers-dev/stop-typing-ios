@@ -132,7 +132,9 @@ final class SharedDefaults {
 
     func appendLog(_ msg: String) {
         let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        let line = "[\(timestamp)] \(msg)\n"
+        // Sanitize newlines to prevent log injection from user-controlled input
+        let safe = msg.replacingOccurrences(of: "\n", with: " ")
+        let line = "[\(timestamp)] \(safe)\n"
         var log = debugLog
         // Keep last 200 lines (larger buffer so we don't trim the error context)
         let lines = log.components(separatedBy: "\n")

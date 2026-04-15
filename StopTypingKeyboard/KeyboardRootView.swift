@@ -8,6 +8,10 @@ import Combine
 final class KeyboardState: ObservableObject {
     @Published var isAppAlive: Bool = false
     @Published var isRecording: Bool = false
+    @Published var suggestions: [String] = []
+
+    /// Replace the current word with a suggestion. Set by KeyboardViewController.
+    var onReplaceSuggestion: ((String) -> Void)?
 }
 
 struct KeyboardRootView: View {
@@ -68,6 +72,13 @@ struct KeyboardRootView: View {
                 .padding(.bottom, 6)
 
             if !isRecording {
+                // Suggestion bar
+                if !state.suggestions.isEmpty {
+                    suggestionBar
+                        .padding(.horizontal, padH)
+                        .padding(.bottom, 4)
+                }
+
                 if showNumbers {
                     numbersView
                 } else {
@@ -79,6 +90,33 @@ struct KeyboardRootView: View {
             }
         }
         .background(Color(UIColor.systemGray6))
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // MARK: - Suggestion Bar
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    private var suggestionBar: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(state.suggestions.enumerated()), id: \.offset) { index, suggestion in
+                if index > 0 {
+                    Divider()
+                        .frame(height: 20)
+                        .foregroundStyle(Color(UIColor.systemGray3))
+                }
+                Button {
+                    state.onReplaceSuggestion?(suggestion)
+                } label: {
+                    Text(suggestion)
+                        .font(.system(size: 16, weight: index == 0 ? .semibold : .regular))
+                        .foregroundStyle(Color(UIColor.label))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 36)
+                }
+            }
+        }
+        .background(Color(UIColor.systemGray5))
+        .clipShape(RoundedRectangle(cornerRadius: 5))
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -419,7 +457,7 @@ struct KeyboardRootView: View {
             1.00, 0.95, 0.90, 0.85, 0.80, 0.70, 0.60, 0.50, 0.40, 0.30
         ]
 
-        waveformTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [self] _ in
+        waveformTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
             let level = CGFloat(SharedDefaults.shared.audioLevel)
             // Anything above 0.05 (~5% of max) counts as speech — the
             // updateAudioLevel dB scaling ensures typical speech lands at
@@ -466,6 +504,7 @@ struct KeyboardRootView: View {
             .frame(width: utilWidth, height: keyH)
             .background(Color(UIColor.systemGray3))
             .clipShape(RoundedRectangle(cornerRadius: keyRadius))
+            .onDisappear { deleteTimer?.invalidate(); deleteTimer = nil }
             .onTapGesture {
                 onDeleteBackward()
             }

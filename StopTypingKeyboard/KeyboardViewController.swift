@@ -24,6 +24,7 @@ class KeyboardViewController: UIInputViewController {
     private let darwin = DarwinNotificationCenter.shared
     private var lastInsertedTranscriptTimestamp: Date?
     private var darwinObserversRegistered = false
+    private let textChecker = UITextChecker()
 
     override init(nibName nibNameOrNil: String?, bundle nibBundleOrNil: Bundle?) {
         super.init(nibName: nibNameOrNil, bundle: nibBundleOrNil)
@@ -35,8 +36,14 @@ class KeyboardViewController: UIInputViewController {
         hasDictationKey = false
     }
 
+    deinit {
+        heartbeatTimer?.invalidate()
+    }
+
     private func klog(_ msg: String) {
-        SharedDefaults.shared.appendLog("KBD: \(msg)")
+        // Sanitize newlines to prevent log injection from user input
+        let safe = msg.replacingOccurrences(of: "\n", with: "\\n")
+        SharedDefaults.shared.appendLog("KBD: \(safe)")
     }
 
     override func viewDidLoad() {
@@ -59,6 +66,11 @@ class KeyboardViewController: UIInputViewController {
 
         setupKeyboardView()
         registerDarwinObservers()
+
+        // Wire up callbacks from KeyboardRootView
+        keyboardState.onReplaceSuggestion = { [weak self] suggestion in
+            self?.replaceCurrentWord(with: suggestion)
+        }
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -269,5 +281,72 @@ class KeyboardViewController: UIInputViewController {
     }
 
     override func textWillChange(_ textInput: UITextInput?) {}
-    override func textDidChange(_ textInput: UITextInput?) {}
+
+    override func textDidChange(_ textInput: UITextInput?) {
+        updateSpellSuggestions()
+    }
+
+    // MARK: - Spell Checking
+
+    private func updateSpellSuggestions() {
+        guard let context = textDocumentProxy.documentContextBeforeInput,
+              !context.isEmpty else {
+            keyboardState.suggestions = []
+            return
+        }
+
+        // Extract the last word being typed
+        let words = context.components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+        guard let lastWord = words.last, lastWord.count >= 2 else {
+            keyboardState.suggestions = []
+            return
+        }
+
+        // Use NSString range for UITextChecker compatibility
+        let nsWord = lastWord as NSString
+        let range = NSRange(location: 0, length: nsWord.length)
+        let misspelledRange = textChecker.rangeOfMisspelledWord(
+            in: lastWord,
+            range: range,
+            startingAt: 0,
+            wrap: false,
+            language: "en_US"
+        )
+
+        if misspelledRange.location != NSNotFound {
+            let guesses = textChecker.guesses(
+                forWordRange: misspelledRange,
+                in: lastWord,
+                language: "en_US"
+            ) ?? []
+            let top3 = Array(guesses.prefix(3))
+            keyboardState.suggestions = top3
+            if !top3.isEmpty {
+                klog("KB: Spell suggestions for '\(lastWord)': \(top3)")
+            }
+        } else {
+            keyboardState.suggestions = []
+        }
+    }
+
+    private func replaceCurrentWord(with suggestion: String) {
+        guard let context = textDocumentProxy.documentContextBeforeInput,
+              !context.isEmpty else { return }
+
+        let words = context.components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+        guard let lastWord = words.last, !lastWord.isEmpty else { return }
+
+        // Use Swift character count (not UTF-16) — deleteBackward() removes
+        // one Swift Character at a time, so café (4 chars) needs 4 deletes,
+        // not 5 (which utf16.count would give for the accented é).
+        for _ in 0..<lastWord.count {
+            textDocumentProxy.deleteBackward()
+        }
+        // Insert the correction
+        textDocumentProxy.insertText(suggestion)
+        keyboardState.suggestions = []
+        klog("KB: Spell corrected '\(lastWord)' → '\(suggestion)'")
+    }
 }

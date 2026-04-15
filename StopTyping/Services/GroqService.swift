@@ -16,8 +16,8 @@ final class GroqService {
            let key = dict["GROQ_API_KEY"] as? String, !key.isEmpty {
             return key
         }
-        let parts = ["gsk_", "lGfX5Np2SWrj", "FltuYQMCWGdyb3", "FYGVYgmKimhKu", "BP8gsr6RXZxfu"]
-        return parts.joined()
+        SharedDefaults.shared.appendLog("APP: ⚠️ GROQ API KEY NOT FOUND in Secrets.plist — transcript cleanup will fail")
+        return ""
     }()
     private let model = "llama-3.1-8b-instant"
     private let timeout: TimeInterval = 3.0
@@ -161,6 +161,7 @@ final class GroqService {
                 if let first = result.first {
                     result = first.uppercased() + result.dropFirst()
                 }
+                break  // Only remove one leading filler
             }
         }
         if !result.hasSuffix(".") && !result.hasSuffix("!") && !result.hasSuffix("?") {
@@ -186,8 +187,13 @@ final class GroqService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = timeout
 
-        // Wrap input so model treats it as data, not conversation
-        let wrappedInput = "Input: \"\(text)\""
+        // Wrap input so model treats it as data, not conversation.
+        // Escape quotes and newlines so the wrapping doesn't break.
+        let escaped = text
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: " ")
+        let wrappedInput = "Input: \"\(escaped)\""
 
         let body = GroqChatRequest(
             model: model,
@@ -229,9 +235,10 @@ final class GroqService {
             return cleanedText.trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
-        // Fallback: return raw content if JSON parsing fails
-        SharedDefaults.shared.appendLog("APP: JSON parse failed, using raw content")
-        return content.trimmingCharacters(in: .whitespacesAndNewlines)
+        // JSON parsing failed — don't return raw content (could be a conversational
+        // response or error message). Throw so the caller falls back to quickClean.
+        SharedDefaults.shared.appendLog("APP: ⚠️ JSON parse failed — raw content: \(content.prefix(100))")
+        throw GroqError.emptyResponse
     }
 }
 
