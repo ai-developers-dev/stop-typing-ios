@@ -51,6 +51,11 @@ final class BackgroundDictationService: ObservableObject {
     /// app has *active audio output*, not just an input tap. Without this,
     /// iOS suspends the process after ~10-30s, killing the heartbeat timer
     /// and making the keyboard fall back to "Start ST".
+    ///
+    /// CRITICAL INVARIANT: This player MUST be playing for the app to survive
+    /// in background. A health check in the heartbeat timer (every 20s) restarts
+    /// it if it stops. If `play()` fails or never starts, the user will see
+    /// "Start ST" within ~30 seconds of backgrounding.
     private var silencePlayerNode: AVAudioPlayerNode?
     /// Re-entry guard for rebuildAudioPipelineFromScratch. Multiple callers
     /// (scenePhase.active → handleForeground, URL scheme → activateSession,
@@ -260,6 +265,17 @@ final class BackgroundDictationService: ObservableObject {
                 guard let self else { return }
                 self.defaults.writeHeartbeat()
                 heartbeatCount += 1
+
+                // Silence player health check every ~20s (every 10th heartbeat).
+                // If the silence player stops, iOS will suspend the app within
+                // ~30 seconds, causing the keyboard to show "Start ST" prematurely.
+                if heartbeatCount % 10 == 0 {
+                    if let player = self.silencePlayerNode, !player.isPlaying {
+                        self.log("⚠️ HEALTH CHECK: silence player stopped — restarting to prevent suspension")
+                        player.play()
+                    }
+                }
+
                 // Log Live Activity state every ~30s (every 15th heartbeat)
                 if heartbeatCount % 15 == 0, let activity = self.currentActivity {
                     self.log("🏝️ Live Activity HEARTBEAT (id=\(activity.id), state=\(activity.activityState))")
@@ -728,6 +744,15 @@ final class BackgroundDictationService: ObservableObject {
         // 7-9. Rebuild idle engine
         startIdleAudioEngine()
 
+        // Verify the silence player is actually playing — if not, the app
+        // will be suspended in background and the keyboard will show "Start ST".
+        if let player = self.silencePlayerNode, !player.isPlaying {
+            log("⚠️ Post-rebuild: silence player not playing — restarting")
+            player.play()
+        } else if self.silencePlayerNode == nil {
+            log("⚠️ Post-rebuild: silence player is nil — keepalive will fail")
+        }
+
         // 10. Fresh session marks
         defaults.writeHeartbeat()
         defaults.bootId = SharedDefaults.currentBootID()
@@ -856,8 +881,11 @@ final class BackgroundDictationService: ObservableObject {
         // producing any audible sound or meaningful battery drain.
         let player = AVAudioPlayerNode()
         engine.attach(player)
-        guard let outputFormat = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1) else {
-            log("❌ Failed to create audio output format")
+        // Try 48kHz first, fall back to 44.1kHz if unavailable. iOS may reject
+        // certain formats on edge-case hardware (older iPhones, paired Bluetooth).
+        guard let outputFormat = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1)
+                                ?? AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1) else {
+            log("❌ CRITICAL: Could not create ANY audio output format — app will be suspended in background")
             return
         }
         engine.connect(player, to: engine.mainMixerNode, format: outputFormat)
@@ -869,8 +897,8 @@ final class BackgroundDictationService: ObservableObject {
             try engine.start()
 
             // Schedule a 1-second silent buffer on infinite loop
-            guard let silenceBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: 48000) else {
-                log("❌ Failed to create silence buffer")
+            guard let silenceBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: UInt32(outputFormat.sampleRate)) else {
+                log("❌ CRITICAL: Could not create silence buffer — app will be suspended in background")
                 return
             }
             silenceBuffer.frameLength = silenceBuffer.frameCapacity
@@ -880,9 +908,17 @@ final class BackgroundDictationService: ObservableObject {
 
             self.audioEngine = engine
             self.silencePlayerNode = player
-            log("Idle engine started (with silence output for background keepalive)")
+
+            // Verify the player actually started — if not, the keepalive will fail
+            // and the app will be suspended within ~30 seconds, causing the keyboard
+            // to show "Start ST" prematurely.
+            if player.isPlaying {
+                log("✅ Idle engine + silence player started (sampleRate=\(outputFormat.sampleRate))")
+            } else {
+                log("⚠️ Silence player.play() called but isPlaying=false — keepalive may fail, app may be suspended")
+            }
         } catch {
-            log("Idle engine FAILED: \(error)")
+            log("❌ Idle engine.start() FAILED: \(error) — app will be suspended in background")
         }
     }
 
@@ -1128,6 +1164,13 @@ final class BackgroundDictationService: ObservableObject {
                 self.defaults.audioLevel = 0
                 await MainActor.run { self.isCurrentlyRecording = false }
                 self.emitRecordingFailed()
+
+                // Auto-recovery: trigger a rebuild in the background so the
+                // next user attempt works without them having to click "Start ST".
+                // Fire-and-forget — we already notified the user via emitRecordingFailed.
+                Task.detached(priority: .userInitiated) { [weak self] in
+                    await self?.rebuildAudioPipelineFromScratch()
+                }
             }
 
         } else {
