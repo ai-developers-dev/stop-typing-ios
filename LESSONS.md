@@ -154,3 +154,54 @@ All routed into `BackgroundDictationService`:
 ## The one-line summary
 
 **We cannot keep the audio session alive forever in background. Our job is to detect death promptly, ask the user to tap the app, rebuild the pipeline while foregrounded, and let them swipe back.** Everything else is plumbing for this one idea.
+
+---
+
+## The iOS 18 System Dictation Button (PERMANENT — CANNOT BE REMOVED)
+
+### What it is
+A microphone icon in the bottom-right of the keyboard. Tapping it triggers iOS's native dictation (NOT Stop Typing). Users see it in all apps (Safari, Messages, Notes, everywhere) with any custom keyboard.
+
+### Why it's there
+Apple added a system-level dictation button to all custom keyboards in iOS 18. It bypasses `UIInputViewController.hasDictationKey` (which we correctly set to `false` in 4 places — that API is effectively deprecated in iOS 18+).
+
+### What we've already done (max suppression — don't add more)
+`hasDictationKey = false` is set at 4 lifecycle points in `KeyboardViewController.swift`:
+- `init(nibName:bundle:)`
+- `init(coder:)`
+- `viewDidLoad()`
+- `viewWillAppear()`
+
+This is the maximum possible suppression. Setting it in more places does not help.
+
+### What we've tried that did NOT work
+- Setting `hasDictationKey = false` at every conceivable lifecycle point ❌ iOS ignores it
+- No Info.plist key controls this ❌
+- No entitlement controls this ❌
+- No extension-type change helps ❌
+
+### Why this is hopeless via code
+- Every third-party keyboard (KeyboardKit, Gboard, SwiftKey, Willow, Wispr Flow) has the same problem
+- Apple Developer Forums threads from 2022-2025 all confirm: no API
+- Apple engineers have stated there is no workaround
+- Using private API would get us rejected from the App Store
+
+### What we decided to do instead
+1. **Visual differentiation** — Our mic button is now a waveform icon with purple gradient (not mic icon with gray background). Impossible to confuse with iOS's system mic.
+2. **User education** — Onboarding and Settings FAQ explain the two mics
+3. **Documentation** — This section prevents re-investigation
+4. **Apple Feedback** — File a radar requesting a proper opt-out API
+
+### If this issue comes up again (IT WILL)
+**DO NOT RE-INVESTIGATE.** The answer is: iOS 18 system UI, cannot be removed by code.
+
+1. Verify our mic button is still the purple waveform (not gray mic)
+2. Verify `hasDictationKey = false` is still set in 4 places
+3. Direct the user to the FAQ in Settings
+4. Do NOT spend hours searching for a new API — there isn't one
+
+### References
+- Apple Developer Forums thread 108497 (iOS 14+ the issue)
+- Commit `d604c8f` (initial): `hasDictationKey=false` has been in our code since day one
+- [UIInputViewController docs](https://developer.apple.com/documentation/uikit/uiinputviewcontroller)
+

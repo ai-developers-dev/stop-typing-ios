@@ -76,6 +76,15 @@ struct SettingsView: View {
                     }
                 }
 
+                // MARK: - Help & FAQ
+                Section("Help & FAQ") {
+                    NavigationLink {
+                        FAQView()
+                    } label: {
+                        Label("Frequently Asked Questions", systemImage: "questionmark.circle")
+                    }
+                }
+
                 // MARK: - About
                 Section("About") {
                     HStack {

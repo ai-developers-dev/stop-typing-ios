@@ -203,13 +203,26 @@ struct KeyboardRootView: View {
                 .clipShape(Capsule())
             }
 
+            // Visually distinct from iOS's system dictation button (small gray
+            // mic in the bottom-right of iOS 18 keyboards, which we can't remove).
+            // Waveform icon + purple gradient = unmistakably Stop Typing.
             Button { onStartDictation() } label: {
-                Image(systemName: "mic.fill")
-                    .font(.system(size: 20))
+                Image(systemName: "waveform")
+                    .font(.system(size: 22, weight: .bold))
                     .foregroundStyle(.white)
-                    .frame(width: 48, height: 48)
-                    .background(Color(UIColor.darkGray))
+                    .frame(width: 52, height: 52)
+                    .background(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.49, green: 0.23, blue: 0.93),
+                                Color(red: 0.65, green: 0.55, blue: 0.98)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
                     .clipShape(Circle())
+                    .shadow(color: .purple.opacity(0.3), radius: 4, x: 0, y: 2)
             }
         }
     }

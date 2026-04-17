@@ -10,7 +10,7 @@ struct OnboardingView: View {
     @AppStorage("onboardingCurrentPage") private var currentPage = 0
     var onComplete: () -> Void
 
-    private let totalSegments = 3
+    private let totalSegments = 4
 
     var body: some View {
         ZStack {
@@ -19,7 +19,7 @@ struct OnboardingView: View {
             pageView
         }
         .onAppear {
-            if currentPage > 6 { currentPage = 0 }
+            if currentPage > 3 { currentPage = 0 }
         }
     }
 
@@ -29,39 +29,21 @@ struct OnboardingView: View {
         case 0:
             WelcomeHeroPage(onNext: { goTo(1) })
         case 1:
-            ValuePropsPage(
+            MicrophonePermissionPage(
                 onBack: { goBack() },
                 onNext: { goTo(2) },
                 totalSegments: totalSegments
             )
         case 2:
-            MicrophonePermissionPage(
+            KeyboardSettingsPage(
                 onBack: { goBack() },
                 onNext: { goTo(3) },
                 totalSegments: totalSegments
             )
-        case 3:
-            SetupIntroPage(
-                onBack: { goBack() },
-                onNext: { goTo(4) },
-                totalSegments: totalSegments
-            )
-        case 4:
-            KeyboardSettingsPage(
-                onBack: { goBack() },
-                onNext: { goTo(5) },
-                totalSegments: totalSegments
-            )
-        case 5:
-            TestDictationPage(
-                onBack: { goBack() },
-                onNext: { goTo(6) },
-                totalSegments: totalSegments
-            )
         default:
-            UseKeyboardPage(
+            TwoMicrophonesPage(
                 onBack: { goBack() },
-                onComplete: onComplete,
+                onNext: onComplete,
                 totalSegments: totalSegments
             )
         }
@@ -337,7 +319,7 @@ struct KeyboardSettingsPage: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .padding(.horizontal, AppTheme.paddingLarge)
 
-                    SoftCTAButton(title: "I've enabled it — Next", action: onNext)
+                    DarkCTAButton(title: "I've enabled it — Let's Go", action: onNext)
                         .padding(.horizontal, AppTheme.paddingLarge)
 
                     SkipLink(title: "Skip for now", action: onNext)
@@ -609,6 +591,107 @@ struct UseKeyboardPage: View {
 
             if divider {
                 Divider().padding(.leading, 16)
+            }
+        }
+    }
+}
+
+// MARK: - Screen 3: About the Two Microphones
+//
+// iOS 18 forces a system dictation button on all custom keyboards that we
+// cannot remove by code. This page teaches users the difference so they don't
+// tap the wrong mic.
+
+struct TwoMicrophonesPage: View {
+    let onBack: () -> Void
+    let onNext: () -> Void
+    let totalSegments: Int
+
+    var body: some View {
+        VStack(spacing: 0) {
+            OnboardingNavBar(
+                showBack: true, onBack: onBack,
+                currentSegment: 3, totalSegments: totalSegments
+            )
+
+            ScrollView {
+                VStack(spacing: 24) {
+                    OnboardingHeading(text: "You'll see two mic icons.\nHere's the difference.")
+                        .padding(.top, 16)
+
+                    // Our mic (the GOOD one)
+                    VStack(spacing: 12) {
+                        Image(systemName: "waveform")
+                            .font(.system(size: 28, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 64, height: 64)
+                            .background(
+                                LinearGradient(
+                                    colors: [
+                                        Color(red: 0.49, green: 0.23, blue: 0.93),
+                                        Color(red: 0.65, green: 0.55, blue: 0.98)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .clipShape(Circle())
+                            .shadow(color: .purple.opacity(0.3), radius: 4, x: 0, y: 2)
+
+                        Text("Use THIS one — Stop Typing")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(.primary)
+
+                        Text("Purple waveform at the top of our keyboard.\nTap to start smart dictation with AI cleanup.")
+                            .font(.system(size: 14))
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(24)
+                    .background(Color.purple.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .padding(.horizontal, AppTheme.paddingLarge)
+
+                    Text("vs")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.secondary)
+
+                    // iOS's mic (the bad one for our users)
+                    VStack(spacing: 12) {
+                        Image(systemName: "mic")
+                            .font(.system(size: 20))
+                            .foregroundStyle(.gray)
+                            .frame(width: 44, height: 44)
+                            .background(Color(UIColor.systemGray5))
+                            .clipShape(Circle())
+
+                        Text("NOT this one — it's Apple's")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(.primary)
+
+                        Text("Gray mic in the bottom corner.\niOS 18 adds this system-wide. Apple's dictation, no AI cleanup. We can't remove it.")
+                            .font(.system(size: 14))
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(24)
+                    .background(Color(UIColor.systemGray6))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .padding(.horizontal, AppTheme.paddingLarge)
+
+                    Text("Always tap the PURPLE mic for Stop Typing's smart dictation.")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, AppTheme.paddingLarge)
+                        .padding(.top, 8)
+
+                    DarkCTAButton(title: "Got it — Let's Start", action: onNext)
+                        .padding(.horizontal, AppTheme.paddingLarge)
+                        .padding(.bottom, AppTheme.paddingXL)
+                }
             }
         }
     }

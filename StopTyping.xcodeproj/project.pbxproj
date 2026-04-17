@@ -37,6 +37,7 @@
 		AA000025 /* DictationOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000025 /* DictationOverlayView.swift */; };
 		AA000026 /* BackgroundDictationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000026 /* BackgroundDictationService.swift */; };
 		AA000027 /* DebugLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000027 /* DebugLogView.swift */; };
+		AA000099 /* FAQView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000099 /* FAQView.swift */; };
 		AA000028 /* GroqService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000028 /* GroqService.swift */; };
 		AA000030 /* AppGroupConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000030 /* AppGroupConfig.swift */; };
 		AA000031 /* SharedDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000031 /* SharedDefaults.swift */; };
@@ -112,6 +113,7 @@
 		BB000025 /* DictationOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationOverlayView.swift; sourceTree = "<group>"; };
 		BB000026 /* BackgroundDictationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundDictationService.swift; sourceTree = "<group>"; };
 		BB000027 /* DebugLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogView.swift; sourceTree = "<group>"; };
+		BB000099 /* FAQView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FAQView.swift; sourceTree = "<group>"; };
 		BB000028 /* GroqService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroqService.swift; sourceTree = "<group>"; };
 		BB000030 /* AppGroupConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppGroupConfig.swift; sourceTree = "<group>"; };
 		BB000031 /* SharedDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedDefaults.swift; sourceTree = "<group>"; };
@@ -306,6 +308,7 @@
 			children = (
 				BB000018 /* SettingsView.swift */,
 				BB000027 /* DebugLogView.swift */,
+				BB000099 /* FAQView.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -503,6 +506,7 @@
 				AA000017 /* HistoryView.swift in Sources */,
 				AA000018 /* SettingsView.swift in Sources */,
 				AA000027 /* DebugLogView.swift in Sources */,
+				AA000099 /* FAQView.swift in Sources */,
 				AA000019 /* KeyboardSetupView.swift in Sources */,
 				AA000020 /* OnboardingView.swift in Sources */,
 				AA000024 /* OnboardingComponents.swift in Sources */,
