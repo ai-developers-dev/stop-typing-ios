@@ -28,12 +28,16 @@ class KeyboardViewController: UIInputViewController {
 
     override init(nibName nibNameOrNil: String?, bundle nibBundleOrNil: Bundle?) {
         super.init(nibName: nibNameOrNil, bundle: nibBundleOrNil)
-        hasDictationKey = false
+        // Apple's API is inverted from intuition:
+        // `true` = "we provide our own dictation" → iOS HIDES the system mic button.
+        // `false` = "we don't have dictation" → iOS SHOWS its mic button.
+        // Setting this to `true` is what actually removes the system mic at the bottom.
+        hasDictationKey = true
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
-        hasDictationKey = false
+        hasDictationKey = true  // See nibName init for semantics
     }
 
     deinit {
@@ -48,7 +52,7 @@ class KeyboardViewController: UIInputViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        hasDictationKey = false
+        hasDictationKey = true  // See nibName init for semantics
 
         // Match the exact same color as our SwiftUI keyboard background
         // This fills the area above our VStack so no different-shade gray shows
@@ -75,7 +79,7 @@ class KeyboardViewController: UIInputViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        hasDictationKey = false
+        hasDictationKey = true  // See nibName init for semantics
         // Immediate state check + UI rebuild — don't wait for timer
         refreshState()
         rebuildView()

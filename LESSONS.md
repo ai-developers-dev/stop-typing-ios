@@ -157,51 +157,49 @@ All routed into `BackgroundDictationService`:
 
 ---
 
-## The iOS 18 System Dictation Button (PERMANENT — CANNOT BE REMOVED)
+## The System Dictation Key — `hasDictationKey` is INVERTED
 
-### What it is
-A microphone icon in the bottom-right of the keyboard. Tapping it triggers iOS's native dictation (NOT Stop Typing). Users see it in all apps (Safari, Messages, Notes, everywhere) with any custom keyboard.
+### The critical gotcha that cost us 6 days
+Apple's `UIInputViewController.hasDictationKey` is **inverted from intuition**. From Apple's header file:
 
-### Why it's there
-Apple added a system-level dictation button to all custom keyboards in iOS 18. It bypasses `UIInputViewController.hasDictationKey` (which we correctly set to `false` in 4 places — that API is effectively deprecated in iOS 18+).
+> `/// When this property is set to YES, the system dictation key, if provided, will be disabled.`
 
-### What we've already done (max suppression — don't add more)
-`hasDictationKey = false` is set at 4 lifecycle points in `KeyboardViewController.swift`:
+And Apple's public docs:
+> "If the value of this property is `true`, the system dictation key is in a disabled state."
+
+**So the semantics are:**
+- `hasDictationKey = true` → "We have our OWN dictation key" → iOS **HIDES** its system mic
+- `hasDictationKey = false` → "We don't have dictation" → iOS **SHOWS** its system mic
+
+This is the OPPOSITE of what the property name suggests.
+
+### Our 6-day regression
+- **Initial commit `e10aba2d` (Phase 3):** Had `hasDictationKey = true` — correct
+- **Commit `b9ee17d8` (April 10):** Flipped to `hasDictationKey = false` with the commit message "to remove Apple's default mic icon" — INVERTED, introduced the bug
+- **Commit `b90e771e` (April 16):** Wrote a long "PERMANENT CANNOT BE REMOVED" section in LESSONS.md canonicalizing the wrong value
+- **Commit fixing this:** Flipped all 4 sites back to `hasDictationKey = true`
+
+The "this is unremovable iOS 18 behavior" research was wrong. It IS removable via the documented public API — we just had the value inverted.
+
+### The correct setting
+In `KeyboardViewController.swift`, ALL 4 lifecycle points set `hasDictationKey = true`:
 - `init(nibName:bundle:)`
 - `init(coder:)`
 - `viewDidLoad()`
 - `viewWillAppear()`
 
-This is the maximum possible suppression. Setting it in more places does not help.
+The comment at the first site explains the inverted semantics. Do NOT flip this back to `false` no matter how intuitive it sounds.
 
-### What we've tried that did NOT work
-- Setting `hasDictationKey = false` at every conceivable lifecycle point ❌ iOS ignores it
-- No Info.plist key controls this ❌
-- No entitlement controls this ❌
-- No extension-type change helps ❌
-
-### Why this is hopeless via code
-- Every third-party keyboard (KeyboardKit, Gboard, SwiftKey, Willow, Wispr Flow) has the same problem
-- Apple Developer Forums threads from 2022-2025 all confirm: no API
-- Apple engineers have stated there is no workaround
-- Using private API would get us rejected from the App Store
-
-### What we decided to do instead
-1. **Visual differentiation** — Our mic button is now a waveform icon with purple gradient (not mic icon with gray background). Impossible to confuse with iOS's system mic.
-2. **User education** — Onboarding and Settings FAQ explain the two mics
-3. **Documentation** — This section prevents re-investigation
-4. **Apple Feedback** — File a radar requesting a proper opt-out API
-
-### If this issue comes up again (IT WILL)
-**DO NOT RE-INVESTIGATE.** The answer is: iOS 18 system UI, cannot be removed by code.
-
-1. Verify our mic button is still the purple waveform (not gray mic)
-2. Verify `hasDictationKey = false` is still set in 4 places
-3. Direct the user to the FAQ in Settings
-4. Do NOT spend hours searching for a new API — there isn't one
+### If the mic comes back
+Before investigating anything else, **check this first:**
+```bash
+grep "hasDictationKey" StopTypingKeyboard/KeyboardViewController.swift
+```
+All 4 must be `= true`. If any are `= false`, flip them.
 
 ### References
-- Apple Developer Forums thread 108497 (iOS 14+ the issue)
-- Commit `d604c8f` (initial): `hasDictationKey=false` has been in our code since day one
-- [UIInputViewController docs](https://developer.apple.com/documentation/uikit/uiinputviewcontroller)
+- [Apple header: `UIInputViewController.h`](file:///Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk/System/Library/Frameworks/UIKit.framework/Headers/UIInputViewController.h)
+- [`hasDictationKey` docs](https://developer.apple.com/documentation/uikit/uiinputviewcontroller/hasdictationkey)
+- [Apple Developer Forums thread 822177](https://developer.apple.com/forums/thread/822177) — confirms `= true` removes the mic
+- Commit history: `e10aba2d` (correct) → `b9ee17d8` (regression) → fix commit (restored)
 
