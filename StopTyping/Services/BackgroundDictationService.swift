@@ -556,7 +556,8 @@ final class BackgroundDictationService: ObservableObject {
             // Save whatever transcript we had
             if !rawTranscript.isEmpty {
                 Task {
-                    let cleaned = await GroqService.shared.cleanTranscript(rawTranscript)
+                    let mode = self.defaults.recentRewriteMode ?? "Formal"
+                    let cleaned = await GroqService.shared.cleanTranscript(rawTranscript, mode: mode)
                     await MainActor.run {
                         self.lastTranscript = cleaned
                         self.defaults.saveTranscript(cleaned)
@@ -605,8 +606,12 @@ final class BackgroundDictationService: ObservableObject {
             reactivateAudioPipeline()
         }
 
-        // Restart Live Activity if it was dismissed
-        if currentActivity == nil {
+        // Restart Live Activity if it was dismissed or iOS ended it externally
+        // (user swiped it away, iOS timed it out, etc.). The nil check alone is
+        // insufficient — a dismissed activity still holds an object reference.
+        let activityAlive = currentActivity?.activityState == .active
+        if !activityAlive {
+            currentActivity = nil
             startLiveActivity()
         }
     }
@@ -731,7 +736,7 @@ final class BackgroundDictationService: ObservableObject {
 
             currentActivity = try Activity.request(
                 attributes: attrs,
-                content: .init(state: state, staleDate: nil),
+                content: .init(state: state, staleDate: Date() + 3600),
                 pushType: nil
             )
             log("Live Activity started (id=\(currentActivity?.id ?? "nil"))")
@@ -744,8 +749,9 @@ final class BackgroundDictationService: ObservableObject {
     private func updateLiveActivity(isRecording: Bool) {
         guard let activity = currentActivity else { return }
         Task {
-            let state = StopTypingWidgetAttributes.ContentState(isRecording: isRecording, mode: "Formal")
-            await activity.update(.init(state: state, staleDate: nil))
+            let mode = self.defaults.recentRewriteMode ?? "Formal"
+            let state = StopTypingWidgetAttributes.ContentState(isRecording: isRecording, mode: mode)
+            await activity.update(.init(state: state, staleDate: Date() + 3600))
         }
     }
 
@@ -972,6 +978,15 @@ final class BackgroundDictationService: ObservableObject {
             }
             if let error {
                 self.log("Recognition error: \(error.localizedDescription)")
+                // If we're still in recording state this is a real terminal error
+                // (network loss, recognizer crash, quota exceeded) — not a cancellation
+                // from our own stopRecording()/cancelRecording() which sets
+                // isCurrentlyRecording=false before or shortly before the error fires.
+                if self.isCurrentlyRecording {
+                    self.log("❌ Terminal recognition error while recording — resetting state + notifying keyboard")
+                    self.emitRecordingFailed()
+                    DispatchQueue.main.async { self.isCurrentlyRecording = false }
+                }
             }
         }
 
@@ -996,6 +1011,7 @@ final class BackgroundDictationService: ObservableObject {
             log("✅ RECORDING STARTED (tap-swap, no engine restart) — posting recordingStarted ACK")
             updateLiveActivity(isRecording: true)
             darwin.post(DarwinNotificationName.recordingStarted)
+            startBufferWatchdog()
 
         } else {
             // === SLOW PATH: engine not running — full create+start (foreground only) ===
@@ -1024,6 +1040,7 @@ final class BackgroundDictationService: ObservableObject {
                 log("✅ RECORDING STARTED (new engine) — posting recordingStarted ACK")
                 updateLiveActivity(isRecording: true)
                 darwin.post(DarwinNotificationName.recordingStarted)
+                startBufferWatchdog()
             } catch {
                 let nsErr = error as NSError
                 log("❌ BLOCK: engine.start() threw: code=\(nsErr.code) \(error.localizedDescription)")
@@ -1190,7 +1207,8 @@ final class BackgroundDictationService: ObservableObject {
             self.currentTranscript = ""
 
             if !rawTranscript.isEmpty {
-                let cleanedTranscript = await GroqService.shared.cleanTranscript(rawTranscript)
+                let mode = self.defaults.recentRewriteMode ?? "Formal"
+                let cleanedTranscript = await GroqService.shared.cleanTranscript(rawTranscript, mode: mode)
                 self.log("LLM cleaned: '\(cleanedTranscript.prefix(80))'")
 
                 await MainActor.run {
@@ -1204,10 +1222,14 @@ final class BackgroundDictationService: ObservableObject {
                 self.log("Empty transcript after \(waited)ms wait")
             }
 
-            // NOW swap back to idle tap — the recognizer is done processing.
-            // The recording tap was kept active during the ASR wait so the
-            // recognizer could continue receiving audio buffers in flight.
-            self.swapToIdleTap()
+            // Swap back to idle tap ONLY if the user hasn't started a new recording
+            // during the 3-second ASR wait. If they have, a new recording tap is
+            // already installed and we must not remove it.
+            if !self.isCurrentlyRecording {
+                self.swapToIdleTap()
+            } else {
+                self.log("stopRecording Task: new recording already started — skipping swapToIdleTap")
+            }
         }
     }
 
@@ -1245,6 +1267,25 @@ final class BackgroundDictationService: ObservableObject {
     }
 
     // MARK: - Helpers
+
+    /// After recording starts, verify that audio buffers are actually arriving
+    /// within 2 seconds. Silent mic (hardware not bound, stale Bluetooth route,
+    /// failed tap-swap) would produce a flatline waveform and an empty transcript.
+    /// If the watchdog fires, abort and let the user retry rather than
+    /// silently delivering garbage.
+    private func startBufferWatchdog() {
+        let startCount = currentTapBufferCount
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard let self, self.isCurrentlyRecording else { return }
+            if self.currentTapBufferCount == startCount {
+                self.log("❌ Buffer watchdog: 0 tap buffers after 2s — mic silent, aborting recording")
+                self.emitRecordingFailed()
+                self.swapToIdleTap()
+                await MainActor.run { self.isCurrentlyRecording = false }
+            }
+        }
+    }
 
     private func stopEngine() {
         if let engine = audioEngine, engine.isRunning {

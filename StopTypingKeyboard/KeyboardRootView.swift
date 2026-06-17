@@ -143,6 +143,7 @@ struct KeyboardRootView: View {
                 ForEach(modes, id: \.self) { mode in
                     Button {
                         selectedMode = mode
+                        SharedDefaults.shared.recentRewriteMode = mode
                     } label: {
                         HStack {
                             Text(mode)

@@ -20,7 +20,7 @@ final class GroqService {
         return parts.joined()
     }()
     private let model = "llama-3.1-8b-instant"
-    private let timeout: TimeInterval = 3.0
+    private let timeout: TimeInterval = 6.0
 
     private let systemPrompt = """
         ## Identity
@@ -78,7 +78,7 @@ final class GroqService {
 
     // MARK: - Clean Transcript
 
-    func cleanTranscript(_ rawText: String) async -> String {
+    func cleanTranscript(_ rawText: String, mode: String = "Formal") async -> String {
         let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return rawText }
 
@@ -91,11 +91,11 @@ final class GroqService {
             return quick
         }
 
-        SharedDefaults.shared.appendLog("APP: Groq cleanup (\(wordCount) words)...")
+        SharedDefaults.shared.appendLog("APP: GROQ_IN [\(mode)] '\(trimmed.prefix(80))'")
 
         do {
-            let cleaned = try await callGroq(trimmed)
-            SharedDefaults.shared.appendLog("APP: Groq done: '\(cleaned.prefix(60))...'")
+            let cleaned = try await callGroq(trimmed, mode: mode)
+            SharedDefaults.shared.appendLog("APP: GROQ_OUT '\(cleaned.prefix(80))'")
             return cleaned
         } catch {
             SharedDefaults.shared.appendLog("APP: Groq FAILED: \(error.localizedDescription) — using quick clean")
@@ -119,14 +119,33 @@ final class GroqService {
             }
         }
         if !result.hasSuffix(".") && !result.hasSuffix("!") && !result.hasSuffix("?") {
-            result += "."
+            let firstWord = result.components(separatedBy: " ").first?.lowercased() ?? ""
+            let questionStarters = ["who", "what", "when", "where", "why", "how",
+                                    "is", "are", "was", "were", "am",
+                                    "can", "could", "do", "does", "did",
+                                    "will", "would", "should", "shall",
+                                    "have", "has", "had", "may", "might"]
+            result += questionStarters.contains(firstWord) ? "?" : "."
         }
         return result
     }
 
     // MARK: - API Call
 
-    private func callGroq(_ text: String) async throws -> String {
+    private func modeInstruction(for mode: String) -> String {
+        switch mode {
+        case "Casual":
+            return "\n\n## Writing Style: Casual\nKeep contractions and informal phrasing. Do not over-correct natural speech patterns or remove casual language."
+        case "Friendly":
+            return "\n\n## Writing Style: Friendly\nWarm, conversational, and approachable. Natural and personable tone."
+        case "Short":
+            return "\n\n## Writing Style: Short\nCompress to the essential meaning. Target 20 words or fewer. Remove all filler, redundancy, and pleasantries."
+        default: // "Formal"
+            return "\n\n## Writing Style: Formal\nProfessional and grammatically correct. Spell out contractions where appropriate."
+        }
+    }
+
+    private func callGroq(_ text: String, mode: String = "Formal") async throws -> String {
         guard !apiKey.isEmpty else {
             SharedDefaults.shared.appendLog("APP: ⚠️ GROQ API KEY IS EMPTY")
             throw GroqError.apiError(statusCode: 401)
@@ -147,7 +166,7 @@ final class GroqService {
         let body = GroqChatRequest(
             model: model,
             messages: [
-                GroqMessage(role: "system", content: systemPrompt),
+                GroqMessage(role: "system", content: systemPrompt + modeInstruction(for: mode)),
                 GroqMessage(role: "user", content: wrappedInput)
             ],
             temperature: 0.0,
@@ -184,9 +203,11 @@ final class GroqService {
             return cleanedText.trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
-        // Fallback: return raw content if JSON parsing fails
-        SharedDefaults.shared.appendLog("APP: JSON parse failed, using raw content")
-        return content.trimmingCharacters(in: .whitespacesAndNewlines)
+        // JSON parse failed — the model returned malformed or prose output.
+        // Fall back to quick local cleanup rather than inserting the raw model
+        // response (which could be "Sure! Here's the corrected text: ...").
+        SharedDefaults.shared.appendLog("APP: JSON parse failed, falling back to quickClean")
+        return quickClean(text)
     }
 }
 
